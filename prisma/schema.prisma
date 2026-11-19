@@ -1,0 +1,296 @@
+// CampusCrew data model.
+// SQLite for zero-setup local runs. Enum-like fields are Strings (validated in
+// src/lib/constants.ts) so the schema ports to PostgreSQL by only changing the
+// datasource provider (and optionally promoting those Strings to enums).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  name            String
+  rollNumber      String    @unique
+  department      String
+  year            Int       @default(1)
+  hostel          String?
+  gender          String // FEMALE | MALE | OTHER
+  genderLocked    Boolean   @default(false) // immutable once verified at signup
+  role            String    @default("STUDENT") // STUDENT | ADMIN
+  emailVerified   Boolean   @default(false)
+  idCardStatus    String    @default("PENDING") // PENDING | VERIFIED | REJECTED
+  idCardImage     String? // optional data URL of the uploaded student ID card
+  trustScore      Int       @default(50)
+  completedRides  Int       @default(0)
+  ratingSum       Int       @default(0)
+  ratingCount     Int       @default(0)
+  punctualCount   Int       @default(0)
+  cancelCount     Int       @default(0)
+  lateCancels     Int       @default(0)
+  trustAdjust     Int       @default(0) // admin adjustments (negative = penalty)
+  buddyVisible    Boolean   @default(false)
+  suspended       Boolean   @default(false)
+  suspendedReason String?
+  upiId           String?
+  createdAt       DateTime  @default(now())
+  lastLoginAt     DateTime?
+
+  segments       TripSegment[]
+  journeys       Journey[]
+  memberships    GroupMember[]
+  hostedGroups   TripGroup[]      @relation("GroupCreator")
+  messages       Message[]
+  reportsMade    Report[]         @relation("Reporter")
+  reportsAgainst Report[]         @relation("ReportTarget")
+  alerts         EmergencyAlert[]
+  buddyEntries   BuddyEntry[]
+  notifications  Notification[]
+  ratingsGiven   Rating[]         @relation("Rater")
+  ratingsGot     Rating[]         @relation("Ratee")
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  email     String
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+}
+
+model Place {
+  id       String  @id @default(cuid())
+  code     String  @unique
+  name     String
+  kind     String // CAMPUS | STATION | AIRPORT | BUS | HOME_HUB
+  city     String
+  lat      Float
+  lng      Float
+  isPublic Boolean @default(true)
+}
+
+model Operator {
+  id          String      @id @default(cuid())
+  name        String
+  plate       String      @unique
+  vehicleType String // SEDAN4 | SUV6 | AUTO | BUS
+  vehicleName String
+  badge       String
+  rating      Float       @default(4.7)
+  phoneMasked String
+  groups      TripGroup[]
+}
+
+model Journey {
+  id        String        @id @default(cuid())
+  ownerId   String
+  owner     User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime      @default(now())
+  segments  TripSegment[]
+
+  @@index([ownerId])
+}
+
+model TripSegment {
+  id           String   @id @default(cuid())
+  journeyId    String
+  journey      Journey  @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seq          Int
+  originId     String
+  destId       String
+  date         String // YYYY-MM-DD
+  windowStart  String // HH:MM
+  windowEnd    String // HH:MM
+  mode         String // CAB | AUTO | BUS | TRAIN | FLIGHT
+  vehicleType  String   @default("SEDAN4")
+  luggage      Int      @default(0)
+  genderPref   String   @default("MIXED") // MIXED | GIRLS_ONLY | BOYS_ONLY
+  trainNumber  String?
+  flightNumber String?
+  status       String   @default("PLANNED") // PLANNED | MATCHED | WAITLISTED | COMPLETED | CANCELLED
+  groupId      String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([journeyId])
+  @@index([date, destId])
+}
+
+model TripGroup {
+  id            String    @id @default(cuid())
+  creatorId     String
+  creator       User      @relation("GroupCreator", fields: [creatorId], references: [id])
+  originId      String
+  destId        String
+  date          String
+  windowStart   String
+  windowEnd     String
+  mode          String
+  vehicleType   String    @default("SEDAN4")
+  seats         Int       @default(4)
+  bagCapacity   Int       @default(4)
+  genderPref    String    @default("MIXED")
+  nightMode     Boolean   @default(false)
+  status        String    @default("OPEN") // OPEN | CONFIRMED | IN_PROGRESS | COMPLETED | CANCELLED
+  pin           String
+  shareToken    String    @unique
+  operatorId    String?
+  operator      Operator? @relation(fields: [operatorId], references: [id])
+  trainNumber   String?
+  flightNumber  String?
+  delayMins     Int       @default(0)
+  fareTotal     Int?
+  feePerRider   Int       @default(5)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  parentGroupId String?
+  note          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  members  GroupMember[]
+  messages Message[]
+  reports  Report[]
+  alerts   EmergencyAlert[]
+
+  @@index([date, destId, originId, status])
+  @@index([creatorId])
+}
+
+model GroupMember {
+  id            String    @id @default(cuid())
+  groupId       String
+  group         TripGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  segmentId     String?
+  status        String    @default("JOINED") // JOINED | WAITLIST | LEFT
+  luggage       Int       @default(0)
+  boarded       Boolean   @default(false)
+  boardedAt     DateTime?
+  paymentStatus String    @default("UNPAID") // PAID | UNPAID
+  shareAmount   Int       @default(0)
+  paidAt        DateTime?
+  joinedAt      DateTime  @default(now())
+  leftAt        DateTime?
+
+  @@unique([groupId, userId])
+  @@index([userId, status])
+}
+
+model Message {
+  id        String    @id @default(cuid())
+  groupId   String
+  group     TripGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id])
+  kind      String    @default("USER") // USER | SYSTEM
+  body      String
+  createdAt DateTime  @default(now())
+
+  @@index([groupId, createdAt])
+}
+
+model Rating {
+  id        String   @id @default(cuid())
+  groupId   String
+  raterId   String
+  rater     User     @relation("Rater", fields: [raterId], references: [id], onDelete: Cascade)
+  rateeId   String
+  ratee     User     @relation("Ratee", fields: [rateeId], references: [id], onDelete: Cascade)
+  score     Int
+  punctual  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@unique([groupId, raterId, rateeId])
+}
+
+model Report {
+  id          String     @id @default(cuid())
+  reporterId  String
+  reporter    User       @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetId    String?
+  target      User?      @relation("ReportTarget", fields: [targetId], references: [id])
+  groupId     String?
+  group       TripGroup? @relation(fields: [groupId], references: [id])
+  type        String // GENDER_MISMATCH | DISPUTE | HARASSMENT | NO_SHOW | OTHER
+  description String
+  status      String     @default("OPEN") // OPEN | RESOLVED | PENALIZED | SUSPENDED
+  resolution  String?
+  createdAt   DateTime   @default(now())
+  resolvedAt  DateTime?
+
+  @@index([status, createdAt])
+}
+
+model EmergencyAlert {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  groupId      String
+  group        TripGroup @relation(fields: [groupId], references: [id])
+  lat          Float
+  lng          Float
+  note         String?
+  status       String    @default("ACTIVE") // ACTIVE | RESOLVED
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+  resolvedNote String?
+
+  @@index([status, createdAt])
+}
+
+model BuddyEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String // TRAIN | FLIGHT
+  number    String // normalised, e.g. 12301 or 6E-2134
+  date      String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, number, date])
+  @@index([number, date])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String // INFO | PROMOTION | INVITE | SAFETY | PENALTY
+  title     String
+  body      String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read, createdAt])
+}
+
+// Anonymised, aggregated trip-intent index (no user identifiers).
+model DemandSnapshot {
+  id     String @id @default(cuid())
+  date   String
+  hour   Int
+  destId String
+  count  Int
+
+  @@unique([date, hour, destId])
+}
+
+model Setting {
+  key   String @id
+  value String
+}
