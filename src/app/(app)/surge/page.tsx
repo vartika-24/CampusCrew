@@ -8,7 +8,7 @@ import { fmtDate } from '@/lib/client';
 import { useData } from '@/lib/useData';
 
 type Cell = { date: string; hour: number; count: number; multiplier: number };
-type Surge = { today: string; breakStart: string; breakEnd: string; breakLabel: string; baseline: number; heat: Cell[]; days: { date: string; total: number; peakHour: number; peakMultiplier: number; inBreak: boolean }[]; peak: Cell; lockSavingPct: number };
+type Surge = { hasData: boolean; configured: boolean; today: string; breakStart: string; breakEnd: string; breakLabel: string; baseline: number; heat: Cell[]; days: { date: string; total: number; peakHour: number; peakMultiplier: number; inBreak: boolean }[]; peak: Cell; lockSavingPct: number };
 
 const hr = (h: number) => `${h % 12 || 12} ${h >= 12 ? 'PM' : 'AM'}`;
 const heatColor = (m: number) => (m >= 2.2 ? '#b91c1c' : m >= 1.8 ? '#dc2626' : m >= 1.5 ? '#f97316' : m >= 1.2 ? '#fbbf24' : m > 1 ? '#fde68a' : '#e2e8f0');
@@ -28,6 +28,9 @@ export default function SurgePage() {
     <div className="space-y-6">
       <div><h1 className="text-2xl font-extrabold text-slate-900">Vacation surge planner</h1><p className="text-sm text-slate-600">{d.breakLabel} · {fmtDate(d.breakStart)} – {fmtDate(d.breakEnd)}. Predicted from aggregated, anonymised trip intents.</p></div>
 
+      {!d.hasData || d.peak.multiplier <= 1 ? (
+        <div className="card p-5 text-sm text-slate-600" data-testid="surge-nodata"><b className="text-slate-900">Not enough trip plans yet to predict a surge.</b> As students plan trips for the coming days, hourly demand and the expected cab-price pressure appear here. {!d.configured && 'Student Affairs can set the vacation window in the admin console.'}</div>
+      ) : (
       <div className="rounded-2xl bg-gradient-to-br from-red-600 to-amber-500 p-5 text-white shadow-card">
         <div className="flex flex-wrap items-center gap-4">
           <Flame className="h-10 w-10 shrink-0" />
@@ -36,6 +39,7 @@ export default function SurgePage() {
           <Link href={lockUrl} className="btn bg-white text-red-700 hover:bg-red-50" data-testid="lock-cta"><Zap className="h-4 w-4" />Lock Early Crew & Save {d.lockSavingPct}%<ArrowRight className="h-4 w-4" /></Link>
         </div>
       </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Peak day" value={peakDay ? fmtDate(peakDay.date) : '–'} sub={`${peakDay?.total ?? 0} departures`} tone="danger" icon={<Flame className="h-5 w-5" />} />

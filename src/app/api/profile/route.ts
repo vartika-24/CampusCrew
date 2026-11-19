@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import { bad, handle, ok, oneOf, readJson, str } from '@/lib/api';
 import { publicUser, requireUser } from '@/lib/auth';
-import { HOSTELS } from '@/lib/constants';
+import { getConfig } from '@/lib/settings';
 import { trustBreakdown } from '@/lib/safety/trust';
 
 export const dynamic = 'force-dynamic';
@@ -21,9 +21,13 @@ export const PATCH = handle(async (req) => {
   const u = await requireUser();
   const body = await readJson(req);
   if ('gender' in body && body.gender !== u.gender) throw bad('Gender is locked after verification and cannot be changed. Contact Student Affairs if it is incorrect.', 'GENDER_LOCKED');
-  for (const k of ['name', 'rollNumber', 'email', 'role', 'trustScore']) if (k in body && body[k] !== (u as unknown as Record<string, unknown>)[k]) throw bad(`${k} cannot be edited`, 'IMMUTABLE');
+  for (const k of ['rollNumber', 'email', 'role', 'trustScore', ...(u.role === 'ADMIN' ? [] : ['name'])]) if (k in body && body[k] !== (u as unknown as Record<string, unknown>)[k]) throw bad(`${k} cannot be edited`, 'IMMUTABLE');
   const data: Record<string, unknown> = {};
-  if (body.hostel !== undefined) data.hostel = oneOf(body.hostel, 'Hostel', HOSTELS);
+  if (body.hostel !== undefined) {
+    const cfg = await getConfig();
+    data.hostel = oneOf(body.hostel, 'Hostel', cfg.hostels as readonly string[]);
+  }
+  if (u.role === 'ADMIN' && body.name !== undefined) data.name = str(body.name, 'Name', { min: 2, max: 60 });
   if (body.upiId !== undefined) {
     const upi = str(body.upiId, 'UPI ID', { optional: true, max: 60 });
     if (upi && !/^[\w.-]{2,}@[a-z]{2,}$/i.test(upi)) throw bad('UPI ID looks like name@bank');

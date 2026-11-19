@@ -58,6 +58,7 @@ export async function transition(user: User, groupId: string, action: 'confirm' 
       await notify(m.userId, 'INFO', 'Trip completed 🎉', 'Rate your co-riders and settle the fare split.', `/trips/${groupId}`);
     }
     for (const m of joined.filter((x) => !x.boarded)) if (m.segmentId) await db.tripSegment.update({ where: { id: m.segmentId }, data: { status: 'CANCELLED' } });
+    await db.locationPing.deleteMany({ where: { groupId } }); // privacy: GPS trail is not retained after the trip
     await postSystem(groupId, 'Trip completed. Please rate co-riders and settle the fare split.');
     await recalcFare(groupId);
   } else if (action === 'cancel') {

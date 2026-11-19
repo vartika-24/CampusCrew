@@ -4,13 +4,13 @@ import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { CheckCircle2, IndianRupee, QrCode, Smartphone } from 'lucide-react';
 import { api, rupees, type Trip } from '@/lib/client';
-import { splitFare, suggestFare } from '@/lib/fare';
+import { splitFare } from '@/lib/fare';
 import { useToast } from './Providers';
 import { Modal } from './ui';
 
 export function FareCard({ trip, meId, reload }: { trip: Trip; meId: string; reload: () => void }) {
   const toast = useToast();
-  const [total, setTotal] = useState(String(trip.fareTotal ?? suggestFare(trip.km, trip.mode, trip.vehicleType)));
+  const [total, setTotal] = useState(trip.fareTotal != null ? String(trip.fareTotal) : '');
   const [qr, setQr] = useState(false);
   const [busy, setBusy] = useState(false);
   const joined = trip.members.filter((m) => m.status === 'JOINED');
@@ -31,7 +31,7 @@ export function FareCard({ trip, meId, reload }: { trip: Trip; meId: string; rel
         <div className="space-y-2">
           <label className="label" htmlFor="fare">Actual total fare (₹) — you pay the driver</label>
           <div className="flex gap-2">
-            <input id="fare" className="input" inputMode="numeric" value={total} onChange={(e) => setTotal(e.target.value.replace(/\D/g, ''))} aria-label="Total fare in rupees" />
+            <input id="fare" className="input" inputMode="numeric" value={total} onChange={(e) => setTotal(e.target.value.replace(/\D/g, ''))} aria-label="Total fare in rupees" placeholder="e.g. 1200" />
             <button className="btn-eco whitespace-nowrap" disabled={busy || total === ''} onClick={() => run(() => api(`/api/groups/${trip.id}/fare`, { body: { total: Number(total) } }), 'Fare split updated')}>Split fare</button>
           </div>
           {!trip.upiPayee?.upiId && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">Add your UPI ID in Profile so riders can pay you.</p>}

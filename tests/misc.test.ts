@@ -1,20 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isCollegeEmail, verifyStudentId, yearFromRoll } from '../src/lib/validators';
+import { isCollegeEmail, yearFromRoll } from '../src/lib/validators';
 import { buildRoute, haversineKm, polylineLength, positionAt, roadKm } from '../src/lib/geo';
 import { addDays, fromMinutes, isNightTime, overlapMinutes, toMinutes } from '../src/lib/time';
 import { normalizeTransit } from '../src/lib/transit';
 
-test('college email domain restriction', () => {
-  assert.equal(isCollegeEmail('student.female@iiita.ac.in'), true);
-  assert.equal(isCollegeEmail('a@mit.edu'), true);
+test('college email domain restriction (default: iiita.ac.in only)', () => {
+  assert.equal(isCollegeEmail('student@iiita.ac.in'), true);
+  assert.equal(isCollegeEmail('x@cs.iiita.ac.in'), true);
+  assert.equal(isCollegeEmail('a@mit.edu'), false);
   assert.equal(isCollegeEmail('a@gmail.com'), false);
+  assert.equal(isCollegeEmail('a@notiiita.ac.in'), false);
   assert.equal(isCollegeEmail('not-an-email'), false);
 });
-test('student ID verification & academic year', () => {
-  assert.equal(verifyStudentId('IEC2024123', new Date('2026-11-19')).ok, true);
-  assert.equal(verifyStudentId('IEC1999123', new Date('2026-11-19')).ok, false);
-  assert.equal(verifyStudentId('BAD', new Date('2026-11-19')).ok, false);
+test('academic year from roll number', () => {
   assert.equal(yearFromRoll('IEC2024123', new Date('2026-11-19')), 3);
 });
 test('time helpers', () => {

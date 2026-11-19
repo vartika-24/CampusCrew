@@ -28,10 +28,3 @@ export function upiLink(opts: { pa: string; pn: string; amount: number; note?: s
   });
   return `upi://pay?${q.toString()}`;
 }
-
-/** Rough fare hint shown in the UI. */
-export function suggestFare(km: number, mode: string, vehicleType: string): number {
-  const perKm = mode === 'AUTO' ? 11 : vehicleType === 'SUV6' ? 19 : 15;
-  const floor = mode === 'AUTO' ? 80 : 180;
-  return Math.max(floor, Math.round((km * perKm) / 10) * 10);
-}

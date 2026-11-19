@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import { ApiError, bad, handle, ok, readJson, str } from '@/lib/api';
 import { requireUser } from '@/lib/auth';
-import { assertNoDues } from '@/lib/safety/guards';
+import { assertNoDues, assertVerified } from '@/lib/safety/guards';
 import { matchOrHost, validateLeg, normalizeLeg, type LegInput } from '@/lib/matching/engine';
 import { parseLeg } from '@/lib/matching/parse';
 import { serializeJourneys } from '@/lib/journeys';
@@ -17,6 +17,7 @@ export const GET = handle(async () => {
 
 export const POST = handle(async (req) => {
   const user = await requireUser();
+  assertVerified(user);
   const body = await readJson(req);
   if (!Array.isArray(body.legs) || body.legs.length < 1 || body.legs.length > 4) throw bad('A journey needs 1–4 legs');
   const legs: LegInput[] = body.legs.map((l, i) => normalizeLeg(parseLeg(l, `Leg ${i + 1}`)));

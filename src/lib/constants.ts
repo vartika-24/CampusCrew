@@ -40,21 +40,6 @@ export const LATE_CANCEL_HOURS = 3;
 
 export const SESSION_COOKIE = 'cc_session';
 
-export const HOSTELS = [
-  'BH-1', 'BH-2', 'BH-3', 'BH-4', 'BH-5', 'GH-1', 'GH-2', 'GH-3', 'Day Scholar',
-] as const;
-
-export const DEPARTMENTS = [
-  'B.Tech ECE', 'B.Tech IT', 'B.Tech CSE', 'B.Tech ITBI', 'M.Tech', 'MBA', 'Ph.D',
-] as const;
-
-export const HELPLINES = [
-  { label: 'Campus Security Control Room (IIITA)', number: '0532-292-2000' },
-  { label: 'Police Emergency', number: '112' },
-  { label: 'Women Helpline', number: '1091' },
-  { label: 'Ambulance', number: '108' },
-];
-
 export const REPORT_TYPES = ['GENDER_MISMATCH', 'DISPUTE', 'HARASSMENT', 'NO_SHOW', 'OTHER'] as const;
 export const REPORT_TYPE_LABEL: Record<string, string> = {
   GENDER_MISMATCH: 'Gender / identity mismatch',
@@ -64,6 +49,4 @@ export const REPORT_TYPE_LABEL: Record<string, string> = {
   OTHER: 'Other',
 };
 
-export const CAMPUS_NAME = 'IIIT Allahabad (Prayagraj)';
-export const CAMPUS_DOMAIN = 'iiita.ac.in';
 export const ROLL_REGEX = /^[A-Z]{3}\d{7}$/;

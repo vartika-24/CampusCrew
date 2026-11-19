@@ -1,48 +1,59 @@
 import { db } from '@/lib/db';
-import { bad, conflict, handle, ok, oneOf, readJson, str } from '@/lib/api';
+import { ApiError, bad, conflict } from '@/lib/api';
+import { handle, ok } from '@/lib/api';
 import { publicUser, setSessionCookie, verifySignupToken } from '@/lib/auth';
-import { DEPARTMENTS, GENDERS, HOSTELS, ROLL_REGEX } from '@/lib/constants';
-import { computeTrust } from '@/lib/safety/trust';
-import { verifyStudentId, yearFromRoll } from '@/lib/validators';
+import { GENDERS, ROLL_REGEX } from '@/lib/constants';
+import { idDocumentCreate, readIdUpload } from '@/lib/idverify';
+import { getConfig } from '@/lib/settings';
+import { yearFromRoll } from '@/lib/validators';
+import { notify } from '@/lib/notify';
 
 export const dynamic = 'force-dynamic';
 
+/** Multipart signup: profile fields + MANDATORY government-ID image. The account stays "pending" until an admin approves the ID. */
 export const POST = handle(async (req) => {
-  const body = await readJson(req);
-  const email = await verifySignupToken(str(body.signupToken, 'signupToken'));
+  let form: FormData;
+  try { form = await req.formData(); } catch { throw bad('Send the signup as multipart form data'); }
+  const f = (k: string) => String(form.get(k) ?? '').trim();
+
+  const email = await verifySignupToken(f('signupToken'));
   if (await db.user.findUnique({ where: { email } })) throw conflict('An account already exists for this email. Sign in instead.');
 
-  const name = str(body.name, 'Full name', { min: 2, max: 60 });
-  const rollNumber = str(body.rollNumber, 'Roll number', { max: 20 }).toUpperCase();
+  const name = f('name');
+  if (name.length < 2 || name.length > 60) throw bad('Enter your full name exactly as on your ID (2–60 characters)');
+  const rollNumber = f('rollNumber').toUpperCase();
   if (!ROLL_REGEX.test(rollNumber)) throw bad('Roll number looks like IEC2024123 (3 letters + 7 digits)', 'BAD_ROLL');
   if (await db.user.findUnique({ where: { rollNumber } })) throw conflict('This roll number is already registered', 'ROLL_TAKEN');
-  const department = str(body.department, 'Department', { max: 40 });
-  if (!(DEPARTMENTS as readonly string[]).includes(department)) throw bad('Pick a department from the list');
-  const hostel = oneOf(body.hostel, 'Hostel', HOSTELS);
-  const gender = oneOf(body.gender, 'Gender', GENDERS);
-  if (body.confirmGenderLock !== true) throw bad('Please confirm that gender is locked after verification', 'GENDER_LOCK_UNCONFIRMED');
-  const upiId = str(body.upiId, 'UPI ID', { optional: true, max: 60 });
+  const cfg = await getConfig();
+  const department = f('department');
+  if (!cfg.departments.includes(department)) throw bad('Pick a department from the list');
+  const hostel = f('hostel');
+  if (!cfg.hostels.includes(hostel)) throw bad('Pick a hostel from the list');
+  const gender = f('gender');
+  if (!(GENDERS as readonly string[]).includes(gender)) throw bad('Select the gender printed on your ID');
+  if (f('confirmGenderLock') !== 'true') throw bad('Please confirm that gender is locked after verification', 'GENDER_LOCK_UNCONFIRMED');
+  const upiId = f('upiId');
   if (upiId && !/^[\w.-]{2,}@[a-z]{2,}$/i.test(upiId)) throw bad('UPI ID looks like name@bank');
 
-  let idCardImage: string | null = null;
-  if (body.idCardImage) {
-    const img = str(body.idCardImage, 'ID card image');
-    if (!/^data:image\/(png|jpe?g|webp);base64,/.test(img)) throw bad('ID card must be a PNG, JPG or WebP image');
-    if (img.length > 1_800_000) throw bad('ID card image is too large (max ~1.3 MB)');
-    idCardImage = img;
+  const id = await readIdUpload(form); // throws if the image is missing / not a real image / too small / duplicate
+
+  let user;
+  try {
+    user = await db.user.create({
+      data: {
+        email, name, rollNumber, department, hostel, gender, year: yearFromRoll(rollNumber), upiId: upiId || null,
+        emailVerified: true, idCardStatus: 'PENDING', idType: id.idType, idDocHash: id.hash, idSubmittedAt: new Date(),
+        genderLocked: false, trustScore: 0, lastLoginAt: new Date(),
+        idDocuments: { create: idDocumentCreate(id) },
+      },
+    });
+  } catch (e) {
+    if ((e as { code?: string }).code === 'P2002') throw new ApiError(409, 'An account with these details already exists.', 'CONFLICT');
+    throw e;
   }
-
-  const check = verifyStudentId(rollNumber);
-  if (!check.ok) throw bad('Student ID could not be verified. Check your roll number.', 'ID_UNVERIFIED', { steps: check.steps });
-
-  const trustScore = computeTrust({ verified: true, completedRides: 0, ratingSum: 0, ratingCount: 0, punctualCount: 0, cancelCount: 0, lateCancels: 0, unresolvedReports: 0, adminAdjust: 0 });
-  const user = await db.user.create({
-    data: {
-      email, name, rollNumber, department, hostel, gender, year: yearFromRoll(rollNumber), upiId: upiId || null,
-      emailVerified: true, idCardStatus: 'VERIFIED', idCardImage, genderLocked: true, trustScore, lastLoginAt: new Date(),
-    },
-  });
-  await db.notification.create({ data: { userId: user.id, kind: 'INFO', title: 'You are verified ✔', body: 'College email and Student ID verified. Gender is now locked on your profile.', link: '/profile' } });
+  await notify(user.id, 'INFO', 'ID submitted for review', 'Student Affairs will verify your ID and gender. You will be emailed once it is approved.', '/profile');
+  const admins = await db.user.findMany({ where: { role: 'ADMIN', suspended: false }, select: { id: true } });
+  await Promise.all(admins.map((a) => notify(a.id, 'INFO', 'New ID to verify', `${name} (${rollNumber}) is waiting for ID review.`, '/admin?tab=verification')));
   await setSessionCookie(user.id);
-  return ok({ user: publicUser(user), verification: check.steps }, { status: 201 });
+  return ok({ user: publicUser(user), pendingReview: true }, { status: 201 });
 });

@@ -1,6 +1,7 @@
 import { db } from './db';
 import { placesMap } from './matching/engine';
-import { surgeMultiplier, demandCells, getSettings } from './surge';
+import { surgeMultiplier, demandCells } from './surge';
+import { getConfig } from './settings';
 import { addDays, eachDate, todayIST } from './time';
 
 export async function alertsDTO(statuses: string[] = ['ACTIVE']) {
@@ -12,7 +13,7 @@ export async function alertsDTO(statuses: string[] = ['ACTIVE']) {
     placesMap(),
   ]);
   return rows.map((a) => ({
-    id: a.id, status: a.status, lat: a.lat, lng: a.lng, note: a.note, createdAt: a.createdAt.toISOString(), resolvedAt: a.resolvedAt?.toISOString() ?? null, resolvedNote: a.resolvedNote,
+    id: a.id, status: a.status, lat: a.lat, lng: a.lng, approximate: a.approximate, note: a.note, createdAt: a.createdAt.toISOString(), resolvedAt: a.resolvedAt?.toISOString() ?? null, resolvedNote: a.resolvedNote,
     rider: { id: a.user.id, name: a.user.name, hostel: a.user.hostel, department: a.user.department, trustScore: a.user.trustScore },
     trip: {
       id: a.groupId, route: `${places.get(a.group.originId)?.name ?? ''} → ${places.get(a.group.destId)?.name ?? ''}`, mode: a.group.mode, status: a.group.status,
@@ -38,9 +39,11 @@ export async function reportsDTO() {
 
 /** Hourly student demand toward Prayagraj Junction & Airport + shuttle-bus recommendation. */
 export async function demandPlan(date: string) {
-  const [pryj, ixd, settings] = await Promise.all([
-    db.place.findUnique({ where: { code: 'PRYJ' } }), db.place.findUnique({ where: { code: 'IXD' } }), getSettings(),
-  ]);
+  const cfg = await getConfig();
+  const settings = { breakStart: cfg.breakStart ?? undefined, breakEnd: cfg.breakEnd ?? undefined };
+  const hubs = await db.place.findMany({ where: { kind: { in: ['STATION', 'AIRPORT'] }, isPublic: true } });
+  const pryj = hubs.find((p) => p.kind === 'STATION' && /junction|PRYJ/i.test(p.name + p.code)) ?? hubs.find((p) => p.kind === 'STATION') ?? null;
+  const ixd = hubs.find((p) => p.kind === 'AIRPORT') ?? null;
   const today = todayIST();
   const from = addDays(today, -2), to = addDays(today, 7);
   const all = await demandCells(from, to);
@@ -49,9 +52,10 @@ export async function demandPlan(date: string) {
   const bStart = settings.breakStart ?? addDays(today, 1), bEnd = settings.breakEnd ?? addDays(today, 4);
   const normal: number[] = [];
   for (const d of eachDate(from, to)) if (d < bStart || d > bEnd) for (let h = 15; h <= 19; h++) normal.push(hourTotal.get(`${d}|${h}`) ?? 0);
-  const baseline = normal.length ? normal.reduce((a, b) => a + b, 0) / normal.length : 1;
+  let baseline = normal.length ? normal.reduce((a, b) => a + b, 0) / normal.length : 0;
+  if (baseline <= 0) { const nz = [...hourTotal.values()].filter((v) => v > 0); baseline = nz.length ? nz.reduce((a, b) => a + b, 0) / nz.length : 1; }
 
-  const SHUTTLE_SEATS = 40;
+  const SHUTTLE_SEATS = cfg.shuttleSeats;
   const SHUTTLE_SHARE = 0.55; // share of intents an institute shuttle can realistically absorb
   const hours = [];
   for (let h = 5; h <= 23; h++) {

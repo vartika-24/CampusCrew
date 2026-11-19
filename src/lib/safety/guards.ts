@@ -54,3 +54,10 @@ export function assertNightAllowed(user: { trustScore: number }, window: Window)
     throw forbidden(`Late-night rides (after 21:00) need a Trust Score of ${TRUST_MIN_NIGHT}+. Yours is ${user.trustScore}.`, 'NIGHT_RESTRICTED');
   }
 }
+
+/** Booking, hosting and buddy features require an admin-verified government ID (and therefore a verified gender). */
+export function assertVerified(user: { idCardStatus: string; emailVerified: boolean }) {
+  if (user.idCardStatus === 'VERIFIED' && user.emailVerified) return;
+  if (user.idCardStatus === 'REJECTED') throw forbidden('Your ID was not accepted. Open your profile to see why and upload a new one.', 'NOT_VERIFIED');
+  throw forbidden('Your ID is awaiting review by Student Affairs. You can book trips as soon as it is approved.', 'NOT_VERIFIED');
+}

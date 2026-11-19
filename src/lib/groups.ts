@@ -2,9 +2,9 @@ import type { Operator, Place, User } from '@prisma/client';
 import { db } from './db';
 import { VEHICLE_SPECS, type VehicleType } from './constants';
 import { splitFare, upiLink } from './fare';
-import { buildRoute, etaMinutes, positionAt, roadKm, simulationSeconds, type LatLng } from './geo';
+import { roadKm } from './geo';
 import { activeMembers, loadGroup, placesMap, type GroupWithMembers } from './matching/engine';
-import { isDemoMode } from './auth';
+import { isDemoMode } from './config';
 
 export const firstName = (n: string) => n.split(' ')[0];
 
@@ -70,20 +70,6 @@ export async function serializeGroup(g: GroupWithMembers, viewer: User | null, s
 
 export async function serializeById(id: string, viewer: User | null) {
   return serializeGroup(await loadGroup(id), viewer);
-}
-
-// ---------- Live tracking ----------
-export function trackingFor(g: { id: string; mode: string; status: string; startedAt: Date | null; delayMins: number }, origin: Place, dest: Place, now = new Date()) {
-  const route: LatLng[] = buildRoute(origin, dest, g.id);
-  const km = roadKm(origin, dest);
-  const eta = etaMinutes(g.mode, km);
-  const simSecs = simulationSeconds(eta);
-  let progress = 0;
-  if (g.status === 'COMPLETED') progress = 1;
-  else if (g.status === 'IN_PROGRESS' && g.startedAt) progress = Math.min(1, Math.max(0, (now.getTime() - g.startedAt.getTime()) / 1000 / simSecs));
-  const position = positionAt(route, progress);
-  const etaRemaining = g.status === 'IN_PROGRESS' || g.status === 'COMPLETED' ? Math.round(eta * (1 - progress)) : eta;
-  return { route, km, etaMinutes: eta, etaRemaining, progress, position, simulationSeconds: simSecs };
 }
 
 export const messageDTO = (m: { id: string; kind: string; body: string; createdAt: Date; userId: string | null; user: { name: string } | null }) => ({

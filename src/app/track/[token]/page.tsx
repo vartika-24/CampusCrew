@@ -7,8 +7,8 @@ import { ErrorBox, PageLoader } from '@/components/ui';
 import { api, fmtDate } from '@/lib/client';
 
 type Track = {
-  state: 'ARRIVED' | 'ON_THE_WAY' | 'NOT_STARTED'; origin: { name: string; lat: number; lng: number }; dest: { name: string; lat: number; lng: number };
-  route: { lat: number; lng: number }[]; position: { lat: number; lng: number }; progress: number; etaMinutes: number; etaRemaining: number; km: number;
+  state: 'ARRIVED' | 'ON_THE_WAY' | 'NOT_STARTED'; source: 'GPS' | 'SIMULATED' | 'NONE'; trail: { lat: number; lng: number }[]; lastSeenAt: string | null; origin: { name: string; lat: number; lng: number }; dest: { name: string; lat: number; lng: number };
+  route: { lat: number; lng: number }[]; position: { lat: number; lng: number } | null; progress: number; etaMinutes: number; etaRemaining: number; km: number;
   mode: string; date: string; windowStart: string; windowEnd: string; delayMins: number; trainNumber: string | null; flightNumber: string | null; nightMode: boolean;
   operator: { name: string; plate: string; vehicleName: string; badge: string } | null; riders: { firstName: string; verified: boolean; boarded: boolean }[]; updatedAt: string;
 };
@@ -42,10 +42,11 @@ export default function TrackPage({ params }: { params: { token: string } }) {
               <h1 className="mt-2 text-lg font-extrabold text-slate-900">{t.origin.name} → {t.dest.name}</h1>
               <p className="text-sm text-slate-500">{fmtDate(t.date)} · pickup window {t.windowStart}–{t.windowEnd}{t.trainNumber ? ` · Train ${t.trainNumber}` : ''}{t.flightNumber ? ` · Flight ${t.flightNumber}` : ''}</p>
             </div>
-            <RouteMap route={t.route} position={t.position} origin={t.origin.name} dest={t.dest.name} progress={t.progress} vehicleLabel={t.operator?.plate} />
+            <RouteMap route={t.route} position={t.position} trail={t.trail} origin={t.origin.name} dest={t.dest.name} progress={t.progress} vehicleLabel={t.operator?.plate} />
+            {t.state === 'ON_THE_WAY' && t.source === 'NONE' && <div className="card p-3 text-sm text-amber-800">The ride has started but no rider is sharing a live location right now{t.lastSeenAt ? ` (last seen ${new Date(t.lastSeenAt).toLocaleTimeString('en-IN')})` : ''}. Try calling them.</div>}
             <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="card p-3"><div className="text-xs font-semibold uppercase text-slate-500">Progress</div><div className="text-xl font-extrabold text-brand-700">{Math.round(t.progress * 100)}%</div></div>
-              <div className="card p-3"><div className="text-xs font-semibold uppercase text-slate-500">ETA</div><div className="text-xl font-extrabold text-slate-900">{t.state === 'ARRIVED' ? 'Arrived' : `${t.etaRemaining} min`}</div></div>
+              <div className="card p-3"><div className="text-xs font-semibold uppercase text-slate-500">Progress</div><div className="text-xl font-extrabold text-brand-700">{t.source === 'NONE' && t.state !== 'ARRIVED' ? '—' : `${Math.round(t.progress * 100)}%`}</div></div>
+              <div className="card p-3"><div className="text-xs font-semibold uppercase text-slate-500">ETA</div><div className="text-xl font-extrabold text-slate-900">{t.state === 'ARRIVED' ? 'Arrived' : t.source === 'NONE' ? '—' : `${t.etaRemaining} min`}</div></div>
               <div className="card p-3"><div className="text-xs font-semibold uppercase text-slate-500">Distance</div><div className="text-xl font-extrabold text-slate-900">{t.km} km</div></div>
             </div>
             {t.operator && (
@@ -62,7 +63,7 @@ export default function TrackPage({ params }: { params: { token: string } }) {
                 <li key={i} className="flex items-center justify-between text-sm"><span className="font-medium text-slate-800">{r.firstName}</span>
                   <span className="flex gap-1.5">{r.boarded && <span className="badge bg-sky-50 text-sky-700">Boarded</span>}{r.verified && <span className="badge bg-emerald-50 text-emerald-700"><BadgeCheck className="h-3 w-3" />Verified</span>}</span></li>))}</ul>
             </div>
-            <p className="text-center text-xs text-slate-500">Location is a simulation for demo purposes. First names only · no phone numbers, seats or home addresses are ever shown. Updated {new Date(t.updatedAt).toLocaleTimeString('en-IN')}.</p>
+            <p className="text-center text-xs text-slate-500">{t.source === 'SIMULATED' ? 'Demo mode: location is simulated. ' : t.source === 'GPS' ? 'Position comes from a rider’s phone and may lag by a few seconds. ' : ''}First names only · no phone numbers, seats or home addresses are ever shown. Updated {new Date(t.updatedAt).toLocaleTimeString('en-IN')}.</p>
           </>
         )}
       </main>

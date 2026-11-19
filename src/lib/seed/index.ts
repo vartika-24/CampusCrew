@@ -1,10 +1,12 @@
 import { randomBytes } from 'crypto';
+import { isDemoMode } from '../config';
 import { db } from '../db';
 import { computeTrust } from '../safety/trust';
 import { splitFare } from '../fare';
 import { addDays, fromMinutes, istInstant, todayIST } from '../time';
 import { isNightWindow } from '../matching/scoring';
 import { ADMIN, DEMO, EXTRAS, OPERATORS, PLACES, type Student } from './data';
+import { ensureDefaultSettings } from '../settings';
 
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -30,7 +32,9 @@ export async function wipe() {
   }
 }
 
+/** Demo data only. Production (DEMO_MODE != true) never seeds sample accounts or trips. */
 export async function ensureSeeded(): Promise<boolean> {
+  if (!isDemoMode()) { await ensureDefaultSettings(); return false; }
   if ((await db.user.count()) > 0) return false;
   await runSeed();
   return true;
@@ -59,14 +63,14 @@ export async function runSeed(): Promise<void> {
     const u = await db.user.create({
       data: {
         email: s.email, name: s.name, rollNumber: s.roll, department: s.dept, year: s.year, hostel: s.hostel,
-        gender: s.gender, genderLocked: true, emailVerified: true, idCardStatus: 'VERIFIED', upiId: s.upi,
+        gender: s.gender, genderLocked: true, emailVerified: true, idCardStatus: 'VERIFIED', isDemo: true, upiId: s.upi,
         buddyVisible: !!s.buddy, trustScore: 50, createdAt: new Date(now.getTime() - 90 * 86400000),
       },
     });
     uid[s.key] = u.id;
   }
   const admin = await db.user.create({
-    data: { email: ADMIN.email, name: ADMIN.name, rollNumber: ADMIN.roll, department: ADMIN.dept, year: 1, hostel: null, gender: 'OTHER', genderLocked: true, role: 'ADMIN', emailVerified: true, idCardStatus: 'VERIFIED', trustScore: 100 },
+    data: { email: ADMIN.email, name: ADMIN.name, rollNumber: ADMIN.roll, department: ADMIN.dept, year: 1, hostel: null, gender: 'OTHER', genderLocked: true, role: 'ADMIN', emailVerified: true, idCardStatus: 'VERIFIED', isDemo: true, trustScore: 100 },
   });
 
   // ---- Historical completed shared trips (drive eco/savings + ride counters)
@@ -306,6 +310,8 @@ export async function runSeed(): Promise<void> {
   for (const [key, value] of Object.entries({ breakStart: D(1), breakEnd: D(4), breakLabel: 'End-Semester Vacation (post-Diwali peak)', returnDate: D(14), seededAt: now.toISOString() })) {
     await db.setting.create({ data: { key, value } });
   }
+
+  await ensureDefaultSettings();
 
   // ---- Final trust recompute from counters + open reports
   const users = await db.user.findMany({ where: { role: 'STUDENT' } });

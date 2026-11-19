@@ -6,8 +6,8 @@ import { ApiError, bad, conflict, forbidden, notFound } from '../api';
 import {
   LATE_CANCEL_HOURS, MAX_LUGGAGE, VEHICLE_SPECS, type GenderPref, type Mode, type VehicleType,
 } from '../constants';
-import { genderAllowed, genderWhere } from '../safety/gender';
-import { assertNightAllowed, assertNoDues, recomputeTrust } from '../safety/guards';
+import { effectiveGender, genderAllowed, genderWhere } from '../safety/gender';
+import { assertNightAllowed, assertNoDues, assertVerified, recomputeTrust } from '../safety/guards';
 import { hoursUntil, overlapMinutes, TIME_RE, DATE_RE, toMinutes, todayIST, fromMinutes } from '../time';
 import { notify } from '../notify';
 import { splitFare } from '../fare';
@@ -49,7 +49,7 @@ export async function loadGroup(id: string): Promise<GroupWithMembers> {
 export async function loadVisibleGroup(id: string, viewer: User): Promise<GroupWithMembers> {
   const g = await loadGroup(id);
   const isMember = g.members.some((m) => m.userId === viewer.id && m.status !== 'LEFT');
-  if (!isMember && viewer.role !== 'ADMIN' && !genderAllowed(viewer.gender, g.genderPref)) throw notFound('Trip not found');
+  if (!isMember && viewer.role !== 'ADMIN' && !genderAllowed(effectiveGender(viewer), g.genderPref)) throw notFound('Trip not found');
   return g;
 }
 
@@ -87,7 +87,7 @@ export async function validateLeg(user: User, leg: LegInput) {
   if (leg.luggage < 0 || leg.luggage > MAX_LUGGAGE) throw bad(`Luggage must be 0–${MAX_LUGGAGE} bags`);
   const spec = specFor(leg.mode, leg.vehicleType);
   if (leg.luggage > spec.bags) throw bad(`${spec.label} cannot carry ${leg.luggage} bags`);
-  if (!genderAllowed(user.gender, leg.genderPref)) {
+  if (!genderAllowed(effectiveGender(user), leg.genderPref)) {
     throw forbidden(leg.genderPref === 'GIRLS_ONLY' ? 'Girls-only trips are available to female students only' : 'Boys-only trips are available to male students only', 'GENDER_LOCK');
   }
   if (leg.mode === 'TRAIN' && !(leg.trainNumber && TRAIN_RE.test(leg.trainNumber))) throw bad('Enter a valid 5-digit train number');
@@ -120,7 +120,7 @@ export async function candidateGroups(user: User, seg: Pick<TripSegment, 'origin
     status: { in: ['OPEN', 'CONFIRMED'] },
     creatorId: { not: user.id },
     members: { none: { userId: user.id, status: { in: ['JOINED', 'WAITLIST'] } } },
-    ...genderWhere(user.gender), // HARD FILTER: never leaks gendered trips
+    ...genderWhere(effectiveGender(user)), // HARD FILTER: never leaks gendered trips
   };
   if (seg.mode === 'CAB') where.vehicleType = seg.vehicleType;
   if (seg.mode === 'TRAIN' && seg.trainNumber) where.trainNumber = seg.trainNumber;
@@ -143,7 +143,7 @@ export async function candidateGroups(user: User, seg: Pick<TripSegment, 'origin
 // ---------- Group creation / joining ----------
 async function pickOperator(vehicleType: string, mode: string) {
   if (mode !== 'CAB' && mode !== 'AUTO') return null;
-  const ops = await db.operator.findMany({ where: { vehicleType }, include: { groups: { where: { status: { in: ['OPEN', 'CONFIRMED', 'IN_PROGRESS'] } }, select: { id: true } } } });
+  const ops = await db.operator.findMany({ where: { vehicleType, active: true }, include: { groups: { where: { status: { in: ['OPEN', 'CONFIRMED', 'IN_PROGRESS'] } }, select: { id: true } } } });
   if (!ops.length) return null;
   ops.sort((a, b) => a.groups.length - b.groups.length);
   return ops[0];
@@ -154,6 +154,7 @@ export const newToken = () => randomBytes(18).toString('base64url');
 
 export async function createGroup(host: User, leg: LegInput, opts: { segmentId?: string; parentGroupId?: string; note?: string; groupNote?: string } = {}) {
   const l = normalizeLeg(leg);
+  assertVerified(host);
   await validateLeg(host, l);
   await assertNoDues(host.id);
   await assertNoClash(host.id, l.date, l.windowStart, l.windowEnd);
@@ -181,7 +182,8 @@ export async function createGroup(host: User, leg: LegInput, opts: { segmentId?:
 export async function joinGroup(user: User, groupId: string, opts: { segmentId?: string; luggage?: number } = {}) {
   const g = await loadVisibleGroup(groupId, user);
   if (!['OPEN', 'CONFIRMED'].includes(g.status)) throw conflict('This trip is no longer accepting riders');
-  if (!genderAllowed(user.gender, g.genderPref)) throw notFound('Trip not found');
+  if (!genderAllowed(effectiveGender(user), g.genderPref)) throw notFound('Trip not found');
+  assertVerified(user);
   await assertNoDues(user.id);
   assertNightAllowed(user, { start: g.windowStart, end: g.windowEnd });
 

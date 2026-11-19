@@ -24,8 +24,14 @@ model User {
   genderLocked    Boolean   @default(false) // immutable once verified at signup
   role            String    @default("STUDENT") // STUDENT | ADMIN
   emailVerified   Boolean   @default(false)
-  idCardStatus    String    @default("PENDING") // PENDING | VERIFIED | REJECTED
-  idCardImage     String? // optional data URL of the uploaded student ID card
+  idCardStatus    String    @default("PENDING") // PENDING (awaiting admin review) | VERIFIED | REJECTED
+  idType          String? // AADHAAR | PASSPORT | VOTER_ID | DRIVING_LICENCE
+  idDocHash       String? // sha256 of the submitted ID image (duplicate-account detection; image itself is purged after review)
+  idSubmittedAt   DateTime?
+  idReviewedById  String?
+  idReviewedAt    DateTime?
+  idRejectReason  String?
+  isDemo          Boolean   @default(false)
   trustScore      Int       @default(50)
   completedRides  Int       @default(0)
   ratingSum       Int       @default(0)
@@ -51,8 +57,36 @@ model User {
   alerts         EmergencyAlert[]
   buddyEntries   BuddyEntry[]
   notifications  Notification[]
+  idDocuments    IdDocument[]
+  pings          LocationPing[]
   ratingsGiven   Rating[]         @relation("Rater")
   ratingsGot     Rating[]         @relation("Ratee")
+}
+
+// Government-ID image awaiting review. Private: only served to admins, deleted as soon as a decision is made.
+model IdDocument {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mime      String
+  width     Int
+  height    Int
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
+// Real rider-device GPS pings during a live trip (deleted when the trip completes).
+model LocationPing {
+  id        String   @id @default(cuid())
+  groupId   String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lat       Float
+  lng       Float
+  accuracy  Float?
+  createdAt DateTime @default(now())
+
+  @@index([groupId, createdAt])
 }
 
 model OtpCode {
@@ -85,6 +119,7 @@ model Operator {
   vehicleType String // SEDAN4 | SUV6 | AUTO | BUS
   vehicleName String
   badge       String
+  active      Boolean     @default(true)
   rating      Float       @default(4.7)
   phoneMasked String
   groups      TripGroup[]
@@ -243,6 +278,7 @@ model EmergencyAlert {
   group        TripGroup @relation(fields: [groupId], references: [id])
   lat          Float
   lng          Float
+  approximate  Boolean   @default(false) // true when no GPS was available (pickup point used)
   note         String?
   status       String    @default("ACTIVE") // ACTIVE | RESOLVED
   createdAt    DateTime  @default(now())

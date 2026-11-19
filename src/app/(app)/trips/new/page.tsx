@@ -12,7 +12,7 @@ import { useData, usePlaces } from '@/lib/useData';
 import { GENDER_PREF_LABEL, MODES, MODE_LABEL, VEHICLE_SPECS } from '@/lib/constants';
 
 type Leg = { originId: string; destId: string; date: string; windowStart: string; windowEnd: string; mode: string; vehicleType: string; luggage: number; genderPref: string; trainNumber: string; flightNumber: string };
-type Meta = { today: string; settings: Record<string, string>; transit: { kind: string; number: string; name: string; departs: string }[] };
+type Meta = { today: string; settings: Record<string, string> };
 type Result = { journey: { id: string; segments: { id: string; origin: { name: string }; dest: { name: string }; mode: string }[] }; results: { segmentId: string; action?: string; groupId?: string; status?: string; error?: string }[] };
 const short = (n: string) => n.split(' (')[0];
 
@@ -23,7 +23,6 @@ function NewTrip() {
   const toast = useToast();
   const places = usePlaces();
   const meta = useData<Meta>('/api/meta');
-  const byCode = (c: string) => places.find((p) => p.code === c)?.id ?? '';
   const [legs, setLegs] = useState<Leg[] | null>(null);
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState<'match' | 'save' | null>(null);
@@ -33,20 +32,20 @@ function NewTrip() {
   const initial = useMemo<Leg[] | null>(() => {
     if (!places.length || !meta.data) return null;
     const date = sp.get('date') || meta.data.settings.breakStart || meta.data.today;
-    return [{ originId: byCode('IIITA-G1'), destId: byCode('PRYJ'), date, windowStart: sp.get('from') || '16:00', windowEnd: sp.get('to') || '17:30', mode: 'CAB', vehicleType: 'SEDAN4', luggage: 1, genderPref: 'MIXED', trainNumber: '', flightNumber: '' }];
+    return [{ originId: places.find((p) => p.kind === 'CAMPUS')?.id ?? '', destId: places.find((p) => p.kind !== 'CAMPUS')?.id ?? '', date, windowStart: sp.get('from') || '16:00', windowEnd: sp.get('to') || '17:30', mode: 'CAB', vehicleType: 'SEDAN4', luggage: 1, genderPref: 'MIXED', trainNumber: '', flightNumber: '' }];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [places.length, !!meta.data]);
   const L = legs ?? initial;
 
   if (!user || !L || !meta.data) return <PageLoader />;
-  const prefs = ['MIXED', ...(user.gender === 'FEMALE' ? ['GIRLS_ONLY'] : []), ...(user.gender === 'MALE' ? ['BOYS_ONLY'] : [])];
+  const prefs = ['MIXED', ...((user.idCardStatus === 'VERIFIED' && user.gender === 'FEMALE') ? ['GIRLS_ONLY'] : []), ...((user.idCardStatus === 'VERIFIED' && user.gender === 'MALE') ? ['BOYS_ONLY'] : [])];
   const update = (i: number, patch: Partial<Leg>) => setLegs(L.map((l, k) => (k === i ? { ...l, ...patch } : l)));
   const placeName = (id: string) => short(places.find((p: Place) => p.id === id)?.name ?? '');
 
   function addLeg() {
     const last = L![L!.length - 1];
     const nextMode = last.mode === 'CAB' ? 'TRAIN' : 'AUTO';
-    setLegs([...L!, { ...last, originId: last.destId, destId: '', mode: nextMode, vehicleType: nextMode === 'AUTO' ? 'AUTO' : 'SHARED', windowStart: last.windowEnd, windowEnd: last.windowEnd >= '23:00' ? '23:59' : `${String(Number(last.windowEnd.slice(0, 2)) + 1).padStart(2, '0')}:${last.windowEnd.slice(3)}`, luggage: 0, trainNumber: nextMode === 'TRAIN' ? '12451' : '', flightNumber: '' }]);
+    setLegs([...L!, { ...last, originId: last.destId, destId: '', mode: nextMode, vehicleType: nextMode === 'AUTO' ? 'AUTO' : 'SHARED', windowStart: last.windowEnd, windowEnd: last.windowEnd >= '23:00' ? '23:59' : `${String(Number(last.windowEnd.slice(0, 2)) + 1).padStart(2, '0')}:${last.windowEnd.slice(3)}`, luggage: 0, trainNumber: '', flightNumber: '' }]);
   }
 
   async function submit(autoMatch: boolean) {
@@ -77,7 +76,7 @@ function NewTrip() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div><h1 className="text-2xl font-extrabold text-slate-900">Plan a trip</h1><p className="text-sm text-slate-600">One leg or a chained journey (cab → train → auto). Public pickup points only — never home addresses.</p></div>
-      <Field label="Journey name (optional)"><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} placeholder="Home to Kanpur — End-Sem Break" /></Field>
+      <Field label="Journey name (optional)"><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} placeholder="e.g. Home for the break" /></Field>
 
       {L.map((l, i) => {
         const spec = l.mode === 'CAB' ? VEHICLE_SPECS[l.vehicleType as 'SEDAN4' | 'SUV6'] : l.mode === 'AUTO' ? VEHICLE_SPECS.AUTO : null;
@@ -98,9 +97,9 @@ function NewTrip() {
               {l.mode === 'CAB' && <Field label="Vehicle"><select className="input" value={l.vehicleType} onChange={(e) => update(i, { vehicleType: e.target.value, luggage: Math.min(l.luggage, 3) })}><option value="SEDAN4">4-seater sedan (max 4 bags)</option><option value="SUV6">6-seater SUV (max 6 bags)</option></select></Field>}
               <Field label={`Luggage (0–3)${spec ? ` · cab fits ${spec.bags}` : ''}`}><select className="input" value={l.luggage} onChange={(e) => update(i, { luggage: Number(e.target.value) })}>{Array.from({ length: maxBags + 1 }, (_, n) => <option key={n} value={n}>{n} bag{n === 1 ? '' : 's'}</option>)}</select></Field>
               <Field label="Crew type" hint={prefs.length === 1 ? 'Gender-specific trips are only offered to matching profiles' : 'Hard filter: others never see your gendered crew'}><select className="input" value={l.genderPref} onChange={(e) => update(i, { genderPref: e.target.value })}>{prefs.map((p) => <option key={p} value={p}>{GENDER_PREF_LABEL[p as keyof typeof GENDER_PREF_LABEL]}</option>)}</select></Field>
-              {l.mode === 'TRAIN' && <Field label="Train number" hint="e.g. 12451 Shram Shakti Exp"><input className="input font-mono" list={`trains-${i}`} value={l.trainNumber} onChange={(e) => update(i, { trainNumber: e.target.value })} maxLength={5} placeholder="12451" /><datalist id={`trains-${i}`}>{meta.data!.transit.filter((t) => t.kind === 'TRAIN').map((t) => <option key={t.number} value={t.number}>{t.name}</option>)}</datalist></Field>}
-              {l.mode === 'FLIGHT' && <Field label="Flight number"><input className="input font-mono uppercase" list={`flights-${i}`} value={l.flightNumber} onChange={(e) => update(i, { flightNumber: e.target.value.toUpperCase() })} placeholder="6E-2134" maxLength={8} /><datalist id={`flights-${i}`}>{meta.data!.transit.filter((t) => t.kind === 'FLIGHT').map((t) => <option key={t.number} value={t.number}>{t.name}</option>)}</datalist></Field>}
-              {(l.mode === 'CAB' || l.mode === 'AUTO') && <Field label="Linked train (optional)"><input className="input font-mono" value={l.trainNumber} onChange={(e) => update(i, { trainNumber: e.target.value })} maxLength={5} placeholder="12301" /></Field>}
+              {l.mode === 'TRAIN' && <Field label="Train number" hint="Printed on your ticket"><input className="input font-mono" value={l.trainNumber} onChange={(e) => update(i, { trainNumber: e.target.value })} maxLength={5} placeholder="5-digit train no." /></Field>}
+              {l.mode === 'FLIGHT' && <Field label="Flight number"><input className="input font-mono uppercase" value={l.flightNumber} onChange={(e) => update(i, { flightNumber: e.target.value.toUpperCase() })} placeholder="6E-2134" maxLength={8} /></Field>}
+              {(l.mode === 'CAB' || l.mode === 'AUTO') && <Field label="Linked train (optional)"><input className="input font-mono" value={l.trainNumber} onChange={(e) => update(i, { trainNumber: e.target.value })} maxLength={5} placeholder="optional" /></Field>}
             </div>
             {l.windowStart >= '21:00' && <p className="rounded-lg bg-indigo-50 p-2.5 text-xs text-indigo-800">🌙 After 21:00 → Night Safety Mode: same-hostel & high-trust matches are boosted. Requires Trust Score 70+ (yours: {user.trustScore}).</p>}
           </section>

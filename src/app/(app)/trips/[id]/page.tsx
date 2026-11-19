@@ -11,9 +11,10 @@ import { RouteMap } from '@/components/RouteMap';
 import { Avatar, ErrorBox, GenderBadge, Modal, ModeBadge, NightBadge, PageLoader, StatusPill, TrustBadge } from '@/components/ui';
 import { api, fmtDate, type Member, type Trip } from '@/lib/client';
 import { useData } from '@/lib/useData';
-import { HELPLINES, REPORT_TYPES, REPORT_TYPE_LABEL } from '@/lib/constants';
+import { REPORT_TYPES, REPORT_TYPE_LABEL } from '@/lib/constants';
+import { LocationSharer } from '@/components/LocationSharer';
 
-type Track = { progress: number; etaRemaining: number; etaMinutes: number; position: { lat: number; lng: number }; route: { lat: number; lng: number }[]; origin: { name: string }; dest: { name: string }; state: string };
+type Track = { source: 'GPS' | 'SIMULATED' | 'NONE'; progress: number; etaRemaining: number; etaMinutes: number; position: { lat: number; lng: number } | null; trail: { lat: number; lng: number }[]; lastSeenAt: string | null; route: { lat: number; lng: number }[]; origin: { name: string }; dest: { name: string }; state: string };
 const short = (n: string) => n.split(' (')[0];
 
 export default function TripRoom({ params }: { params: { id: string } }) {
@@ -24,7 +25,7 @@ export default function TripRoom({ params }: { params: { id: string } }) {
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<null | 'sos' | 'sosDone' | 'return' | 'report' | 'leave' | 'join'>(null);
   const [lug, setLug] = useState(0);
-  const [sosInfo, setSosInfo] = useState<{ lat: number; lng: number } | null>(null);
+  const [sosInfo, setSosInfo] = useState<{ lat: number; lng: number; approximate?: boolean; helplines: { label: string; number: string }[] } | null>(null);
   const [pin, setPin] = useState('');
   const [reportFor, setReportFor] = useState<Member | null>(null);
   const [rep, setRep] = useState({ type: 'DISPUTE', description: '' });
@@ -63,7 +64,15 @@ export default function TripRoom({ params }: { params: { id: string } }) {
 
   async function sos() {
     setBusy(true);
-    try { const r = await api<{ alert: { lat: number; lng: number } }>(`/api/groups/${trip!.id}/sos`, { body: {} }); setSosInfo(r.alert); setModal('sosDone'); reload(); }
+    try {
+      // Best effort: send this device's GPS with the SOS (falls back to the last shared position / pickup point on the server).
+      const gps = await new Promise<{ lat: number; lng: number } | null>((resolve) => {
+        if (!('geolocation' in navigator)) return resolve(null);
+        navigator.geolocation.getCurrentPosition((p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }), () => resolve(null), { enableHighAccuracy: true, timeout: 4000, maximumAge: 15000 });
+      });
+      const r = await api<{ alert: { lat: number; lng: number; approximate: boolean }; helplines: { label: string; number: string }[] }>(`/api/groups/${trip!.id}/sos`, { body: gps ?? {} });
+      setSosInfo({ ...r.alert, helplines: r.helplines }); setModal('sosDone'); reload();
+    }
     catch (e) { toast.push('error', (e as Error).message); setModal(null); } finally { setBusy(false); }
   }
 
@@ -115,7 +124,10 @@ export default function TripRoom({ params }: { params: { id: string } }) {
             <div className="card space-y-3 p-4">
               <div className="flex items-center justify-between"><h3 className="flex items-center gap-2 font-bold text-slate-900">{live && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />}Live trip sharing</h3>
                 <span className="text-xs font-semibold text-slate-500">{track.state === 'ARRIVED' ? 'Arrived' : live ? `ETA ${track.etaRemaining} min` : `~${track.etaMinutes} min ride`}</span></div>
-              <RouteMap route={track.route} position={track.position} origin={short(trip.origin.name)} dest={short(trip.dest.name)} progress={track.progress} vehicleLabel={trip.operator?.plate} />
+              <RouteMap route={track.route} position={track.position} trail={track.trail} origin={short(trip.origin.name)} dest={short(trip.dest.name)} progress={track.progress} vehicleLabel={trip.operator?.plate} />
+              {live && track.source === 'NONE' && <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">No live location yet. A rider needs to tap <b>Share my live location</b> below so family can follow the trip.</p>}
+              {track.source === 'SIMULATED' && <p className="rounded-lg bg-slate-100 p-2 text-xs text-slate-600">Demo mode: position is simulated.</p>}
+              {trip.isMember && <LocationSharer groupId={trip.id} live={live} />}
               <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand-600 transition-all duration-1000" style={{ width: `${Math.round(track.progress * 100)}%` }} /></div>
               <div className="flex flex-wrap gap-2">
                 <button className="btn-secondary btn-sm" onClick={copyLink}><Copy className="h-3.5 w-3.5" />Copy parent link</button>
@@ -218,8 +230,8 @@ export default function TripRoom({ params }: { params: { id: string } }) {
       </Modal>
 
       <Modal open={modal === 'sosDone'} onClose={() => setModal(null)} title="SOS sent — help is alerted">
-        <div className="space-y-3"><div className="rounded-xl bg-red-50 p-3 text-sm text-red-900"><b>Campus Security has been notified</b> with your location ({sosInfo ? `${sosInfo.lat.toFixed(4)}, ${sosInfo.lng.toFixed(4)}` : '…'}). Stay on the line and keep your crew close.</div>
-          <ul className="space-y-2">{HELPLINES.map((h) => <li key={h.number}><a href={`tel:${h.number.replace(/[^\d]/g, '')}`} className="flex items-center justify-between rounded-xl border border-slate-200 p-3 hover:bg-slate-50"><span className="text-sm font-medium">{h.label}</span><span className="flex items-center gap-1 font-mono font-bold text-red-600"><Phone className="h-4 w-4" />{h.number}</span></a></li>)}</ul></div>
+        <div className="space-y-3"><div className="rounded-xl bg-red-50 p-3 text-sm text-red-900"><b>Campus Security has been notified</b>{sosInfo?.approximate ? ' (exact location unavailable — the pickup point was sent; tell them where you are).' : ` with your location (${sosInfo ? `${sosInfo.lat.toFixed(4)}, ${sosInfo.lng.toFixed(4)}` : '…'}).`} Stay safe and keep your crew close.</div>
+          <ul className="space-y-2">{(sosInfo?.helplines ?? []).map((h) => <li key={h.number}><a href={`tel:${h.number.replace(/[^\d]/g, '')}`} className="flex items-center justify-between rounded-xl border border-slate-200 p-3 hover:bg-slate-50"><span className="text-sm font-medium">{h.label}</span><span className="flex items-center gap-1 font-mono font-bold text-red-600"><Phone className="h-4 w-4" />{h.number}</span></a></li>)}</ul></div>
       </Modal>
 
       <Modal open={modal === 'leave'} onClose={() => setModal(null)} title="Leave this crew?">

@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { handle, ok } from '@/lib/api';
 import { requireUser } from '@/lib/auth';
-import { genderWhere } from '@/lib/safety/gender';
+import { effectiveGender, genderWhere } from '@/lib/safety/gender';
 import { serializeGroup } from '@/lib/groups';
 import { toLite } from '@/lib/matching/engine';
 import { scoreMatch } from '@/lib/matching/scoring';
@@ -17,7 +17,7 @@ export const GET = handle(async (req) => {
   const where: Prisma.TripGroupWhereInput = {
     status: { in: ['OPEN', 'CONFIRMED'] },
     date: { gte: todayIST() },
-    ...genderWhere(user.gender), // HARD FILTER: gendered trips never leak to the wrong gender
+    ...genderWhere(effectiveGender(user)), // HARD FILTER: gendered trips never leak to the wrong gender
   };
   if (q.get('mine') !== '1') where.members = { none: { userId: user.id, status: { in: ['JOINED', 'WAITLIST'] } } };
   const origin = q.get('origin'), dest = q.get('dest'), mode = q.get('mode'), pref = q.get('pref'), date = q.get('date');

@@ -9,7 +9,7 @@ import { rupees, type Trip } from '@/lib/client';
 import { useData } from '@/lib/useData';
 
 type Mine = { active: Trip[]; upcoming: Trip[]; past: Trip[] };
-type Surge = { peak: { date: string; hour: number; multiplier: number }; breakLabel: string; lockSavingPct: number };
+type Surge = { hasData: boolean; peak: { date: string; hour: number; multiplier: number }; breakLabel: string; lockSavingPct: number };
 type Eco = { mine: { moneySaved: number; co2Kg: number; cabsEliminated: number; trips: number } | null };
 
 export default function Dashboard() {
@@ -43,7 +43,7 @@ export default function Dashboard() {
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><div><b>Trust score {user.trustScore} (below 70).</b> You are ranked lower in matching and cannot book rides departing after 21:00. Complete rides on time to recover. <Link href="/profile" className="font-bold underline">See breakdown</Link></div></div>
       )}
 
-      {surge.data && (
+      {surge.data && surge.data.hasData && surge.data.peak.multiplier > 1 && (
         <Link href="/surge" className="block rounded-2xl bg-gradient-to-r from-brand-900 to-brand-700 p-4 text-white shadow-card">
           <div className="flex items-center gap-3"><TrendingUp className="h-8 w-8 shrink-0 text-amber-300" />
             <div className="min-w-0 flex-1"><div className="font-extrabold">{surge.data.peak.multiplier}× cab surge predicted on {new Date(surge.data.peak.date + 'T00:00:00Z').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' })}, {surge.data.peak.hour % 12 || 12} {surge.data.peak.hour >= 12 ? 'PM' : 'AM'}</div>

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Bell, BarChart3, Compass, Home, Leaf, LogOut, Plus, Shield, TicketsPlane, TrendingUp, User as UserIcon, Siren } from 'lucide-react';
+import { BadgeCheck, Bell, BarChart3, Settings, Compass, Home, Leaf, LogOut, Plus, Shield, TicketsPlane, TrendingUp, User as UserIcon, Siren } from 'lucide-react';
 import { useAuth } from './Providers';
 import { api, fmtTimeAgo } from '@/lib/client';
 import { PageLoader } from './ui';
@@ -20,10 +20,10 @@ const STUDENT_NAV = [
 ];
 const ADMIN_NAV = [
   { href: '/admin', label: 'Console', icon: Shield },
+  { href: '/admin?tab=verification', label: 'IDs', icon: BadgeCheck },
   { href: '/admin?tab=demand', label: 'Demand', icon: BarChart3 },
   { href: '/admin?tab=safety', label: 'Safety', icon: Siren },
-  { href: '/surge', label: 'Surge', icon: TrendingUp },
-  { href: '/eco', label: 'Eco', icon: Leaf },
+  { href: '/admin?tab=settings', label: 'Setup', icon: Settings },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -48,7 +48,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (loading || !user) return <PageLoader text="Securing your session…" />;
   const isAdmin = user.role === 'ADMIN';
   const nav = isAdmin ? ADMIN_NAV : STUDENT_NAV;
-  const isActive = (href: string) => (href === '/admin' ? path === '/admin' : path === href.split('?')[0] || path.startsWith(href.split('?')[0] + '/'));
+  const isActive = (href: string) => (href.startsWith('/admin') ? false : path === href.split('?')[0] || path.startsWith(href.split('?')[0] + '/'));
 
   async function openBell() {
     setBell((b) => !b);
@@ -106,6 +106,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
+      {!isAdmin && user.idCardStatus !== 'VERIFIED' && (
+        <div className={`border-b px-4 py-2 text-center text-sm font-medium ${user.idCardStatus === 'REJECTED' ? 'border-red-200 bg-red-50 text-red-800' : 'border-amber-200 bg-amber-50 text-amber-900'}`} role="status">
+          {user.idCardStatus === 'REJECTED' ? 'Your ID was not accepted — ' : 'Your ID is awaiting review — you can browse mixed crews but cannot book yet. '}
+          <Link href="/profile" className="font-bold underline">{user.idCardStatus === 'REJECTED' ? 'upload a new ID' : 'check status'}</Link>
+        </div>
+      )}
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden" aria-label="Mobile">
         <div className="grid grid-cols-5">

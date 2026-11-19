@@ -1,7 +1,9 @@
 // PUBLIC read-only live trip tracking (no login). Exposes only first names, plate/driver and progress.
 import { db } from '@/lib/db';
 import { handle, notFound, ok } from '@/lib/api';
-import { placeDTO, trackingFor, firstName } from '@/lib/groups';
+import { firstName, placeDTO } from '@/lib/groups';
+import { ARRIVED_KM, trackingForGroup } from '@/lib/tracking';
+import { haversineKm } from '@/lib/geo';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,11 +16,12 @@ export const GET = handle<{ token: string }>(async (_req, { params }) => {
   if (!g || g.status === 'CANCELLED') throw notFound('Tracking link is invalid or has expired');
   const [o, d] = await Promise.all([db.place.findUnique({ where: { id: g.originId } }), db.place.findUnique({ where: { id: g.destId } })]);
   if (!o || !d) throw notFound('Route unavailable');
-  const t = trackingFor(g, o, d);
-  const label = g.status === 'COMPLETED' || t.progress >= 1 ? 'ARRIVED' : g.status === 'IN_PROGRESS' ? 'ON_THE_WAY' : 'NOT_STARTED';
+  const t = await trackingForGroup(g, o, d);
+  const arrived = g.status === 'COMPLETED' || (g.status === 'IN_PROGRESS' && !!t.position && t.source === 'GPS' && haversineKm(t.position, d) < ARRIVED_KM) || (t.source === 'SIMULATED' && t.progress >= 1);
+  const state = arrived ? 'ARRIVED' : g.status === 'IN_PROGRESS' ? 'ON_THE_WAY' : 'NOT_STARTED';
   return ok({
-    state: label, tripStatus: g.status, origin: placeDTO(o), dest: placeDTO(d), route: t.route, position: t.position, progress: t.progress,
-    etaMinutes: t.etaMinutes, etaRemaining: t.etaRemaining, km: t.km, simulated: true,
+    state, tripStatus: g.status, source: t.source, origin: placeDTO(o), dest: placeDTO(d), route: t.route, trail: t.trail, position: t.position, lastSeenAt: t.lastSeenAt,
+    progress: t.progress, etaMinutes: t.etaMinutes, etaRemaining: t.etaRemaining, km: t.km,
     mode: g.mode, vehicleType: g.vehicleType, date: g.date, windowStart: g.windowStart, windowEnd: g.windowEnd, delayMins: g.delayMins,
     trainNumber: g.trainNumber, flightNumber: g.flightNumber, nightMode: g.nightMode, genderPref: g.genderPref,
     operator: g.operator ? { name: g.operator.name, plate: g.operator.plate, vehicleName: g.operator.vehicleName, badge: g.operator.badge } : null,

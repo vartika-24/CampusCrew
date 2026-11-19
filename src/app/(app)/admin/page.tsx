@@ -10,14 +10,15 @@ import { EmptyState, ErrorBox, PageLoader, SectionTitle, Stat, TrustBadge } from
 import { api, fmtDate, fmtTimeAgo, rupees } from '@/lib/client';
 import { useData } from '@/lib/useData';
 import { REPORT_TYPE_LABEL } from '@/lib/constants';
+import { OperatorsTab, PlacesTab, SettingsTab, VerificationTab } from '@/components/admin/AdminTabs';
 
-type Overview = { students: number; verified: number; suspended: number; openTrips: number; liveTrips: number; completed: number; todaysTrips: number; activeSos: number; openReports: number; lowTrust: number; eco: { moneySaved: number; co2Kg: number; cabsEliminated: number; trips: number } };
+type Overview = { pendingIds: number; students: number; verified: number; suspended: number; openTrips: number; liveTrips: number; completed: number; todaysTrips: number; activeSos: number; openReports: number; lowTrust: number; eco: { moneySaved: number; co2Kg: number; cabsEliminated: number; trips: number } };
 type Demand = { date: string; hours: { hour: number; label: string; junction: number; airport: number; total: number; multiplier: number; buses: number }[]; plan: { time: string; to: string; buses: number; students: number }[]; shuttleSeats: number; totalBuses: number; totalStudents: number; dates: string[] };
-type Alert = { id: string; status: string; lat: number; lng: number; note: string | null; createdAt: string; resolvedAt: string | null; resolvedNote: string | null; rider: { name: string; hostel: string | null; department: string; trustScore: number }; trip: { id: string; route: string; plate: string | null; driver: string | null; riders: string[]; status: string } };
+type Alert = { approximate?: boolean; id: string; status: string; lat: number; lng: number; note: string | null; createdAt: string; resolvedAt: string | null; resolvedNote: string | null; rider: { name: string; hostel: string | null; department: string; trustScore: number }; trip: { id: string; route: string; plate: string | null; driver: string | null; riders: string[]; status: string } };
 type Report = { id: string; type: string; status: string; description: string; resolution: string | null; createdAt: string; reporter: { name: string }; target: { id: string; name: string; trustScore: number; suspended: boolean; hostel: string | null } | null; trip: string | null };
 type User = { id: string; name: string; email: string; department: string; hostel: string | null; trustScore: number; completedRides: number; cancelCount: number; lateCancels: number; suspended: boolean };
 
-const TABS = [['overview', 'Overview'], ['demand', 'Demand & shuttles'], ['safety', 'Safety queue'], ['users', 'Students']] as const;
+const TABS = [['overview', 'Overview'], ['verification', 'ID verification'], ['demand', 'Demand & shuttles'], ['safety', 'Safety queue'], ['users', 'Students'], ['places', 'Places'], ['operators', 'Operators'], ['settings', 'Settings']] as const;
 
 function Console() {
   const { user } = useAuth();
@@ -32,6 +33,10 @@ function Console() {
         {TABS.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => router.push(k === 'overview' ? '/admin' : `/admin?tab=${k}`)} className={`whitespace-nowrap rounded-lg px-4 py-1.5 ${tab === k ? 'bg-white shadow' : 'text-slate-600'}`}>{l}</button>)}
       </div>
       {tab === 'overview' && <OverviewTab />}
+      {tab === 'verification' && <VerificationTab />}
+      {tab === 'places' && <PlacesTab />}
+      {tab === 'operators' && <OperatorsTab />}
+      {tab === 'settings' && <SettingsTab />}
       {tab === 'demand' && <DemandTab />}
       {tab === 'safety' && <SafetyTab />}
       {tab === 'users' && <UsersTab />}
@@ -47,6 +52,7 @@ function OverviewTab() {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="IDs to review" value={d.pendingIds} tone={d.pendingIds ? 'warn' : 'eco'} icon={<ShieldCheck className="h-5 w-5" />} sub="government ID queue" />
         <Stat label="Active SOS" value={d.activeSos} tone={d.activeSos ? 'danger' : 'eco'} icon={<Siren className="h-5 w-5" />} sub="needs response" />
         <Stat label="Open reports" value={d.openReports} tone="warn" icon={<ShieldAlert className="h-5 w-5" />} />
         <Stat label="Verified students" value={`${d.verified}/${d.students}`} icon={<Users className="h-5 w-5" />} sub={`${d.lowTrust} below trust 70`} />
@@ -56,7 +62,7 @@ function OverviewTab() {
         <Stat label="CO₂ avoided" value={`${d.eco.co2Kg} kg`} tone="eco" icon={<Leaf className="h-5 w-5" />} sub={`${d.eco.cabsEliminated} solo cabs`} />
         <Stat label="Suspended" value={d.suspended} tone="warn" icon={<UserX className="h-5 w-5" />} />
       </div>
-      <div className="grid gap-3 sm:grid-cols-2"><Link href="/admin?tab=safety" className="card p-4 font-semibold text-brand-700 hover:shadow-lg">Open safety moderation queue →</Link><Link href="/admin?tab=demand" className="card p-4 font-semibold text-brand-700 hover:shadow-lg">Plan institute shuttles →</Link></div>
+      <div className="grid gap-3 sm:grid-cols-3"><Link href="/admin?tab=verification" className="card p-4 font-semibold text-brand-700 hover:shadow-lg">Review student IDs →</Link><Link href="/admin?tab=safety" className="card p-4 font-semibold text-brand-700 hover:shadow-lg">Open safety moderation queue →</Link><Link href="/admin?tab=demand" className="card p-4 font-semibold text-brand-700 hover:shadow-lg">Plan institute shuttles →</Link></div>
     </div>
   );
 }
@@ -103,7 +109,7 @@ function SafetyTab() {
               <div className="flex flex-wrap items-start gap-3"><Siren className="h-6 w-6 shrink-0 animate-pulse text-red-600" />
                 <div className="min-w-0 flex-1"><div className="font-extrabold text-red-900">SOS · {a.rider.name} <span className="font-medium">({a.rider.department}{a.rider.hostel ? `, ${a.rider.hostel}` : ''})</span></div>
                   <div className="text-sm text-red-900">{a.trip.route} · {a.trip.plate ? `${a.trip.plate} · ${a.trip.driver}` : 'no vehicle'} · co-riders: {a.trip.riders.join(', ')}</div>
-                  <div className="mt-1 font-mono text-xs text-red-800">GPS {a.lat.toFixed(5)}, {a.lng.toFixed(5)} · <a className="underline" target="_blank" rel="noreferrer" href={`https://www.openstreetmap.org/?mlat=${a.lat}&mlon=${a.lng}#map=15/${a.lat}/${a.lng}`}>open map</a> · {fmtTimeAgo(a.createdAt)}</div></div>
+                  <div className="mt-1 font-mono text-xs text-red-800">{a.approximate ? 'Approximate (pickup point; no GPS available)' : 'GPS'} {a.lat.toFixed(5)}, {a.lng.toFixed(5)} · <a className="underline" target="_blank" rel="noreferrer" href={`https://www.openstreetmap.org/?mlat=${a.lat}&mlon=${a.lng}#map=15/${a.lat}/${a.lng}`}>open map</a> · {fmtTimeAgo(a.createdAt)}</div></div>
                 <button className="btn-danger btn-sm" disabled={busy === a.id} onClick={() => act(`/api/admin/alerts/${a.id}`, { action: 'resolve', note: 'Security team reached the vehicle; rider confirmed safe.' }, 'SOS marked resolved', a.id)}>Resolve</button></div></div>))}</div>)}
       </section>
 

@@ -21,3 +21,11 @@ export function genderWhere(userGender: string): { genderPref: { in: string[] } 
 export function canCreateWithPref(userGender: Gender | string, pref: string): boolean {
   return genderAllowed(userGender, pref);
 }
+
+/**
+ * Gender used for visibility decisions. Until an admin has verified the government ID,
+ * the self-declared gender is NOT trusted: unverified users only ever see MIXED crews.
+ */
+export function effectiveGender(u: { gender: string; idCardStatus: string; role?: string }): string {
+  return u.idCardStatus === 'VERIFIED' ? u.gender : 'OTHER';
+}

@@ -31,7 +31,7 @@ function TripsInner() {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
-  const prefs = GENDER_PREFS.filter((p) => !user || p === 'MIXED' || (p === 'GIRLS_ONLY' && user.gender === 'FEMALE') || (p === 'BOYS_ONLY' && user.gender === 'MALE'));
+  const prefs = GENDER_PREFS.filter((p) => !user || p === 'MIXED' || (p === 'GIRLS_ONLY' && (user.idCardStatus === 'VERIFIED' && user.gender === 'FEMALE')) || (p === 'BOYS_ONLY' && (user.idCardStatus === 'VERIFIED' && user.gender === 'MALE')));
 
   async function join() {
     if (!joining) return;

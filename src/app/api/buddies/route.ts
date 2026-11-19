@@ -2,7 +2,8 @@ import { db } from '@/lib/db';
 import { bad, handle, ok, readJson, str } from '@/lib/api';
 import { requireUser } from '@/lib/auth';
 import { DATE_RE } from '@/lib/time';
-import { findTransit, normalizeTransit } from '@/lib/transit';
+import { normalizeTransit } from '@/lib/transit';
+import { assertVerified } from '@/lib/safety/guards';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,8 @@ export const GET = handle(async (req) => {
   const date = q.get('date') ?? '';
   if (!t) throw bad('Enter a 5-digit train number (e.g. 12301) or flight number (e.g. 6E-2134)');
   if (!DATE_RE.test(date)) throw bad('Pick a travel date');
-  const info = findTransit(t.number) ?? null;
+  const info = null;
+  assertVerified(user);
   const domain = user.email.split('@')[1];
   const mine = await db.buddyEntry.findUnique({ where: { userId_number_date: { userId: user.id, number: t.number, date } } });
   if (!user.buddyVisible) return ok({ optInRequired: true, buddies: [], transit: { ...t, info }, joined: !!mine });

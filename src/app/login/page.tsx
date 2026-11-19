@@ -64,7 +64,7 @@ function LoginInner() {
       <div>
         <Link href="/" className="mb-6 inline-flex items-center gap-1 text-sm font-semibold text-slate-500 hover:text-slate-800"><ArrowLeft className="h-4 w-4" />Back</Link>
         <h1 className="text-3xl font-extrabold text-slate-900">Sign in to CampusCrew</h1>
-        <p className="mt-2 text-slate-600">Use your college email. New here? Verifying your OTP starts a quick onboarding with Student ID check.</p>
+        <p className="mt-2 text-slate-600">We email a one-time code to your college address. New here? Verifying it starts a quick identity check.</p>
 
         <div className="card mt-6 p-5">
           {step === 'email' ? (
@@ -73,7 +73,7 @@ function LoginInner() {
                 <span className="label">College email</span>
                 <div className="relative"><Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <input className="input pl-9" type="email" inputMode="email" autoComplete="email" placeholder="you@iiita.ac.in" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-                <span className="mt-1 block text-xs text-slate-500">Only .ac.in / .edu addresses are accepted.</span>
+                <span className="mt-1 block text-xs text-slate-500">Only your college email (@iiita.ac.in) is accepted.</span>
               </label>
               {err && <p role="alert" className="text-sm font-medium text-red-600">{err}</p>}
               <button className="btn-primary w-full" disabled={busy === 'otp'}>{busy === 'otp' ? <Spinner className="!text-white" /> : <KeyRound className="h-4 w-4" />}Send OTP</button>
@@ -96,10 +96,11 @@ function LoginInner() {
         </div>
       </div>
 
+      {demoMode ? (
       <div>
         <div className="card p-5">
           <div className="mb-1 flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-brand-700"><Sparkles className="h-4 w-4" />One-click demo login</div>
-          <p className="mb-4 text-sm text-slate-500">Pre-seeded IIIT Allahabad accounts{demoMode ? '' : ' (disabled in this deployment)'}.</p>
+          <p className="mb-4 text-sm text-slate-500">Sample accounts with sample data — demo mode only.</p>
           <div className="space-y-2.5">
             {DEMOS.map((d) => (
               <button key={d.email} onClick={() => demo(d)} disabled={!!busy || !demoMode} className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 text-left transition hover:border-brand-300 hover:bg-brand-50/40 disabled:opacity-60" data-testid={`demo-${d.email}`}>
@@ -111,6 +112,13 @@ function LoginInner() {
           </div>
         </div>
       </div>
+      ) : (
+      <div className="card space-y-3 p-5 text-sm text-slate-600">
+        <div className="font-extrabold text-slate-900">Who can join?</div>
+        <p>Students with an <b>@iiita.ac.in</b> email. We email you a one-time code, then verify a government ID (Aadhaar, passport, voter ID or driving licence) so girls-only and boys-only trips stay genuinely safe.</p>
+        <p>Your ID is reviewed by Student Affairs and deleted right after.</p>
+      </div>
+      )}
     </div>
   );
 }

@@ -5,26 +5,33 @@ import { SESSION_COOKIE } from './constants';
 import { forbidden, unauthorized } from './api';
 import type { User } from '@prisma/client';
 
-const secretStr = process.env.AUTH_SECRET || 'campuscrew-dev-secret-change-me-please-0123456789';
-if (process.env.NODE_ENV === 'production' && !process.env.AUTH_SECRET) {
-  console.warn('[auth] AUTH_SECRET is not set; using an insecure default. Set it in production.');
-}
-const secret = new TextEncoder().encode(secretStr);
+const DEV_SECRET = 'campuscrew-dev-secret-change-me-please-0123456789';
 
-export const isDemoMode = () => process.env.DEMO_MODE !== 'false';
+/** Session-signing key. Production (non-demo) refuses to run without a strong AUTH_SECRET. */
+function secretKey(): Uint8Array {
+  const v = process.env.AUTH_SECRET;
+  if (!v) {
+    if (process.env.NODE_ENV === 'production' && process.env.DEMO_MODE !== 'true') throw new Error('AUTH_SECRET must be set in production (use a random string of 32+ characters).');
+    return new TextEncoder().encode(DEV_SECRET);
+  }
+  if (process.env.NODE_ENV === 'production' && process.env.DEMO_MODE !== 'true' && v.length < 32) throw new Error('AUTH_SECRET must be at least 32 characters in production.');
+  return new TextEncoder().encode(v);
+}
+
+export { isDemoMode } from './config';
 
 export async function signSession(userId: string): Promise<string> {
-  return new SignJWT({ uid: userId }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('14d').sign(secret);
+  return new SignJWT({ uid: userId }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('14d').sign(secretKey());
 }
 
 /** Short-lived token proving the email passed OTP verification (used by onboarding). */
 export async function signSignupToken(email: string): Promise<string> {
-  return new SignJWT({ email, purpose: 'signup' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('30m').sign(secret);
+  return new SignJWT({ email, purpose: 'signup' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('30m').sign(secretKey());
 }
 
 export async function verifySignupToken(token: string): Promise<string> {
   try {
-    const { payload } = await jwtVerify(token, secret);
+    const { payload } = await jwtVerify(token, secretKey());
     if (payload.purpose !== 'signup' || typeof payload.email !== 'string') throw new Error('bad');
     return payload.email;
   } catch {
@@ -50,7 +57,7 @@ export function clearSessionCookie() {
 export async function getUserFromToken(token?: string | null): Promise<User | null> {
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, secret);
+    const { payload } = await jwtVerify(token, secretKey());
     if (typeof payload.uid !== 'string') return null;
     return await db.user.findUnique({ where: { id: payload.uid } });
   } catch {
@@ -89,6 +96,6 @@ export function publicUser(u: User) {
     idCardStatus: u.idCardStatus, trustScore: u.trustScore, completedRides: u.completedRides,
     buddyVisible: u.buddyVisible, upiId: u.upiId, suspended: u.suspended,
     ratingAvg: u.ratingCount ? Math.round((u.ratingSum / u.ratingCount) * 10) / 10 : null,
-    cancelCount: u.cancelCount, lateCancels: u.lateCancels,
+    cancelCount: u.cancelCount, lateCancels: u.lateCancels, idType: u.idType, idRejectReason: u.idRejectReason, isDemo: u.isDemo,
   };
 }

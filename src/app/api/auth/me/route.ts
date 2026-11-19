@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { handle, ok } from '@/lib/api';
-import { getSessionUser, isDemoMode, publicUser } from '@/lib/auth';
+import { getSessionUser, publicUser } from '@/lib/auth';
+import { isDemoMode } from '@/lib/config';
 import { outstandingDues } from '@/lib/safety/guards';
 
 export const dynamic = 'force-dynamic';

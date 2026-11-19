@@ -25,6 +25,24 @@ function check(name, cond, extra = '') {
 }
 const section = (t) => console.log(`\n▸ ${t}`);
 
+function fakePng(w = 900, h = 600) {
+  const b = Buffer.alloc(2048, 7);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0);
+  b.writeUInt32BE(13, 8); b.write('IHDR', 12, 'ascii'); b.writeUInt32BE(w, 16); b.writeUInt32BE(h, 20);
+  b.writeUInt32BE(Math.floor(Math.random() * 4e9), 40); // unique bytes per call (duplicate-image check)
+  return b;
+}
+async function signupForm(client, token, fields, image) {
+  const fd = new FormData();
+  fd.set('signupToken', token);
+  for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+  if (image) fd.set('idImage', new Blob([image], { type: 'image/png' }), 'id.png');
+  const res = await fetch(BASE + '/api/auth/signup', { method: 'POST', body: fd, headers: client.cookie ? { cookie: client.cookie } : {} });
+  const sc = res.headers.get('set-cookie'); if (sc) client.cookie = sc.split(';')[0];
+  let data = null; try { data = await res.json(); } catch {}
+  return { status: res.status, data };
+}
+const newUserToken = async (c, tag) => { const email = `${tag}${Date.now() % 1000000}@iiita.ac.in`; const o = await c.req('/api/auth/request-otp', { body: { email } }); const v = await c.req('/api/auth/verify-otp', { body: { email, otp: o.data.devOtp } }); return { email, token: v.data.signupToken }; };
 const addDays = (d, n) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const demo = async (email) => { const c = new Client(email); const r = await c.req('/api/auth/demo', { body: { email } }); if (r.status !== 200) throw new Error(`demo login failed for ${email}: ${r.status}`); return c; };
 
@@ -38,26 +56,45 @@ const demo = async (email) => { const c = new Client(email); const r = await c.r
   check('API requires auth', (await anon.req('/api/groups/mine')).status === 401);
   check('admin API requires auth', (await anon.req('/api/admin/overview')).status === 401);
 
-  section('Signup: domain restriction, OTP, student ID, gender lock');
-  const bad = await anon.req('/api/auth/request-otp', { body: { email: 'someone@gmail.com' } });
-  check('non-college email rejected', bad.status === 400);
+  section('Signup: domain restriction, OTP, mandatory government ID, gender lock');
+  check('non-college email rejected', (await anon.req('/api/auth/request-otp', { body: { email: 'someone@gmail.com' } })).status === 400);
+  check('other .ac.in college rejected (iiita.ac.in only)', (await anon.req('/api/auth/request-otp', { body: { email: 'someone@iitb.ac.in' } })).status === 400);
   const email = `new.student${Date.now() % 100000}@iiita.ac.in`;
   const otpRes = await anon.req('/api/auth/request-otp', { body: { email } });
-  check('OTP issued with dev OTP', otpRes.status === 200 && /^\d{6}$/.test(otpRes.data.devOtp ?? ''));
+  check('OTP issued (demo mode shows dev OTP)', otpRes.status === 200 && /^\d{6}$/.test(otpRes.data.devOtp ?? ''));
+  check('OTP response does not reveal whether the account exists', !('isNewUser' in otpRes.data));
+  check('OTP resend throttled (30s)', (await anon.req('/api/auth/request-otp', { body: { email } })).status === 429);
   check('wrong OTP rejected', (await anon.req('/api/auth/verify-otp', { body: { email, otp: otpRes.data.devOtp === '000000' ? '111111' : '000000' } })).status === 400);
   const ver = await anon.req('/api/auth/verify-otp', { body: { email, otp: otpRes.data.devOtp } });
   check('OTP verified → needs onboarding', ver.status === 200 && ver.data.needsOnboarding === true && !!ver.data.signupToken);
-  const badRoll = await anon.req('/api/auth/signup', { body: { signupToken: ver.data.signupToken, name: 'New Student', rollNumber: 'BAD123', department: 'B.Tech IT', hostel: 'BH-1', gender: 'FEMALE', confirmGenderLock: true } });
-  check('invalid roll number rejected', badRoll.status === 400);
-  const noLock = await anon.req('/api/auth/signup', { body: { signupToken: ver.data.signupToken, name: 'New Student', rollNumber: 'IIT2025999', department: 'B.Tech IT', hostel: 'BH-1', gender: 'FEMALE' } });
-  check('gender-lock confirmation required', noLock.status === 400);
-  const su = await anon.req('/api/auth/signup', { body: { signupToken: ver.data.signupToken, name: 'New Student', rollNumber: 'IIT2025999', department: 'B.Tech IT', hostel: 'GH-1', gender: 'FEMALE', confirmGenderLock: true, upiId: 'newstudent@okaxis' } });
-  check('signup succeeds (201) & verified', su.status === 201 && su.data.user.idCardStatus === 'VERIFIED' && su.data.user.genderLocked === true);
-  check('new user trust = base 50', su.data.user.trustScore === 50);
+  const base = { name: 'New Student', rollNumber: 'IIT2025999', department: 'B.Tech IT', hostel: 'GH-1', gender: 'FEMALE', confirmGenderLock: 'true', idType: 'AADHAAR', upiId: 'newstudent@okaxis' };
+  check('signup WITHOUT ID image rejected', (await signupForm(anon, ver.data.signupToken, base, null)).data?.code === 'ID_IMAGE_REQUIRED');
+  check('signup with a text file as "ID" rejected', (await signupForm(anon, ver.data.signupToken, base, Buffer.from('not an image'.repeat(10)))).data?.code === 'ID_IMAGE_INVALID');
+  check('signup with tiny image rejected', (await signupForm(anon, ver.data.signupToken, base, fakePng(100, 80))).data?.code === 'ID_IMAGE_INVALID');
+  check('signup without ID type rejected', (await signupForm(anon, ver.data.signupToken, { ...base, idType: 'COLLEGE_ID' }, fakePng())).data?.code === 'ID_TYPE_REQUIRED');
+  check('invalid roll number rejected', (await signupForm(anon, ver.data.signupToken, { ...base, rollNumber: 'BAD123' }, fakePng())).status === 400);
+  check('gender-lock confirmation required', (await signupForm(anon, ver.data.signupToken, { ...base, confirmGenderLock: 'false' }, fakePng())).status === 400);
+  const idPng = fakePng();
+  const su = await signupForm(anon, ver.data.signupToken, base, idPng);
+  check('signup succeeds (201) and is PENDING review', su.status === 201 && su.data.user.idCardStatus === 'PENDING' && su.data.pendingReview === true);
+  check('pending user has trust 0 and gender not yet locked', su.data.user.trustScore === 0 && su.data.user.genderLocked === false);
+  const newUserId = su.data.user.id;
+  const dup = await newUserToken(new Client('d'), 'dup');
+  check('same ID image cannot be reused on another account', (await signupForm(new Client('d2'), dup.token, { ...base, rollNumber: 'IIT2025998' }, idPng)).status === 409);
+  check('same roll number cannot re-register', (await signupForm(new Client('d3'), dup.token, base, fakePng())).status === 409);
   const patch = await anon.req('/api/profile', { method: 'PATCH', body: { gender: 'MALE' } });
   check('gender edit blocked (GENDER_LOCKED)', patch.status === 400 && patch.data.code === 'GENDER_LOCKED');
-  check('profile edit of UPI works', (await anon.req('/api/profile', { method: 'PATCH', body: { upiId: 'new.s@oksbi' } })).status === 200);
-  check('same roll number cannot re-register', (await (async () => { const c = new Client('x'); const e2 = `dup${Date.now() % 100000}@iiita.ac.in`; const o = await c.req('/api/auth/request-otp', { body: { email: e2 } }); const v = await c.req('/api/auth/verify-otp', { body: { email: e2, otp: o.data.devOtp } }); return c.req('/api/auth/signup', { body: { signupToken: v.data.signupToken, name: 'Dup', rollNumber: 'IIT2025999', department: 'B.Tech IT', hostel: 'BH-1', gender: 'MALE', confirmGenderLock: true } }); })()).status === 409);
+
+  section('Unverified (pending) users are restricted');
+  const placesP = (await anon.req('/api/places')).data.places;
+  const pidP = (c) => placesP.find((p) => p.code === c).id;
+  const peekDay = (await anon.req('/api/meta')).data.settings.breakStart;
+  const legP = { originId: pidP('IIITA-G1'), destId: pidP('PRYJ'), date: peekDay, windowStart: '10:00', windowEnd: '11:00', mode: 'CAB', vehicleType: 'SEDAN4', luggage: 1, genderPref: 'MIXED' };
+  const cj = await anon.req('/api/journeys', { body: { legs: [legP], autoMatch: false } });
+  check('pending user cannot plan trips (NOT_VERIFIED)', cj.status === 403 && cj.data.code === 'NOT_VERIFIED');
+  const pendSearch = await anon.req('/api/trips/search');
+  check('pending (even declared FEMALE) user sees ONLY mixed crews', pendSearch.status === 200 && pendSearch.data.trips.length > 0 && pendSearch.data.trips.every((t) => t.genderPref === 'MIXED'));
+  check('pending user cannot opt in to buddy visibility', (await anon.req('/api/buddies/visibility', { body: { visible: true } })).status === 403);
 
   section('Demo accounts & seeded data');
   const ananya = await demo('student.female@iiita.ac.in');
@@ -71,6 +108,36 @@ const demo = async (email) => { const c = new Client(email); const r = await c.r
   check('Kabir trust 64 with 2 cancellations', K.trustScore === 64 && K.cancelCount === 2);
   check('non-demo email rejected for demo login', (await new Client('z').req('/api/auth/demo', { body: { email: 'priya.nair@iiita.ac.in' } })).status === 403);
   check('admin role', (await me(admin)).role === 'ADMIN');
+
+  section('Admin government-ID review');
+  const q = (await admin.req('/api/admin/verifications')).data;
+  const mine = q.queue.find((u) => u.id === newUserId);
+  check('admin queue lists the pending student with ID image', !!mine && !!mine.image && mine.idType === 'AADHAAR');
+  check('student cannot read the verification queue', (await rohan.req('/api/admin/verifications')).status === 403);
+  const imgRes = await admin.req(`/api/admin/verifications/${newUserId}/image`, { raw: true });
+  check('admin can fetch ID image (private, no-store)', imgRes.status === 200 && imgRes.headers.get('content-type') === 'image/png' && /no-store/.test(imgRes.headers.get('cache-control')));
+  check('students cannot fetch ID images', (await rohan.req(`/api/admin/verifications/${newUserId}/image`, { raw: true })).status === 403);
+  check('anonymous cannot fetch ID images', (await new Client('q').req(`/api/admin/verifications/${newUserId}/image`, { raw: true })).status === 403);
+  check('approve requires explicit confirmation', (await admin.req(`/api/admin/verifications/${newUserId}`, { body: { action: 'approve' } })).status === 400);
+  const rej = await newUserToken(new Client('r'), 'rej');
+  const rejC = new Client('rejc');
+  const rejSignup = await signupForm(rejC, rej.token, { ...base, rollNumber: 'IIT2025888', name: 'Rejected Person' }, fakePng());
+  check('second student signs up', rejSignup.status === 201);
+  check('reject requires a reason', (await admin.req(`/api/admin/verifications/${rejSignup.data.user.id}`, { body: { action: 'reject' } })).status === 400);
+  check('admin rejects with reason', (await admin.req(`/api/admin/verifications/${rejSignup.data.user.id}`, { body: { action: 'reject', reason: 'Photo is blurry, gender not readable' } })).status === 200);
+  const rejMe = (await rejC.req('/api/auth/me')).data.user;
+  check('rejected student sees reason', rejMe.idCardStatus === 'REJECTED' && /blurry/.test(rejMe.idRejectReason));
+  check('rejected ID image is deleted', (await admin.req(`/api/admin/verifications/${rejSignup.data.user.id}/image`, { raw: true })).status === 404);
+  const reup = new FormData(); reup.set('idType', 'PASSPORT'); reup.set('idImage', new Blob([fakePng()], { type: 'image/png' }), 'id.png');
+  const reupRes = await fetch(BASE + '/api/profile/id', { method: 'POST', body: reup, headers: { cookie: rejC.cookie } });
+  check('rejected student can re-upload an ID (back to PENDING)', reupRes.status === 200 && (await reupRes.json()).user.idCardStatus === 'PENDING');
+  const ap = await admin.req(`/api/admin/verifications/${newUserId}`, { body: { action: 'approve', confirmed: true, gender: 'FEMALE' } });
+  check('admin approves (gender confirmed)', ap.status === 200);
+  check('approved ID image is deleted after review', (await admin.req(`/api/admin/verifications/${newUserId}/image`, { raw: true })).status === 404);
+  const approved = (await anon.req('/api/auth/me')).data.user;
+  check('approved: VERIFIED, gender locked, trust = base 50', approved.idCardStatus === 'VERIFIED' && approved.genderLocked === true && approved.trustScore === 50);
+  check('approved student can now plan trips', (await anon.req('/api/journeys', { body: { legs: [legP], autoMatch: false } })).status === 201);
+  check('verified student can no longer replace the ID', (await (async () => { const f2 = new FormData(); f2.set('idType', 'AADHAAR'); f2.set('idImage', new Blob([fakePng()], { type: 'image/png' }), 'x.png'); return fetch(BASE + '/api/profile/id', { method: 'POST', body: f2, headers: { cookie: anon.cookie } }); })()).status === 403);
 
   section('Gender hard filter');
   const rSearch = await rohan.req('/api/trips/search');
@@ -150,7 +217,7 @@ const demo = async (email) => { const c = new Client(email); const r = await c.r
   check('rider sees verified vehicle + plate', !!liveR.operator && /^UP-70-/.test(liveR.operator.plate));
   check('4-digit PIN exists (demo hint for riders)', /^\d{4}$/.test(liveR.demoPin || ''));
   const track = (await anon.req(`/api/track/${liveR.shareToken}`)).data;
-  check('public tracking works without login', !!track && track.state === 'ON_THE_WAY' && track.progress > 0);
+  check('public tracking works without login (demo: simulated)', !!track && track.state === 'ON_THE_WAY' && track.progress > 0 && track.source === 'SIMULATED');
   check('public tracking hides PIN/email/last names', !JSON.stringify(track).match(/pin|@iiita|Verma|Sharma|phone/i));
   check('invalid tracking token → 404', (await anon.req('/api/track/not-a-real-token-123456')).status === 404);
   const g2 = (await rohan.req('/api/trips/search?date=' + d3)).data.trips.find((t) => t.mode === 'CAB' && t.genderPref === 'MIXED' && t.seatsLeft > 0 && !t.nightMode);
@@ -245,7 +312,8 @@ const demo = async (email) => { const c = new Client(email); const r = await c.r
   check('only first name, dept, year, trust, train/flight exposed', ['firstName', 'department', 'year', 'trustScore', 'number'].every((k) => keys.has(k)) && !['email', 'phone', 'seat', 'coach', 'hostel', 'userId', 'name', 'gender'].some((k) => keys.has(k)));
   check('non-visible students never listed', !JSON.stringify(ab.data).includes('Divya'));
   check('invalid train number rejected', (await ananya.req(`/api/buddies?number=abc&date=${future}`)).status === 400);
-  const co = await rohan.req('/api/buddies/coordinate', { body: { number: '12417', date: d2, genderPref: 'MIXED' } });
+  const co = await rohan.req('/api/buddies/coordinate', { body: { number: '12417', date: d2, genderPref: 'MIXED', departs: '20:20', originId: pid('IIITA-G1'), stationId: pid('PRYJ'), destId: pid('NDLS') } });
+  check('coordinate requires user-entered departure time (no hard-coded schedules)', (await rohan.req('/api/buddies/coordinate', { body: { number: '12417', date: d2, originId: pid('IIITA-G1'), stationId: pid('PRYJ') } })).status === 400);
   check('coordinate cab spins up linked Leg-1 cab group', co.status === 201 && !!co.data.groupId && co.data.invited >= 1);
   const coTrip = (await rohan.req(`/api/groups/${co.data.groupId}`)).data.trip;
   check('linked cab goes PRYJ-bound, tied to train 12417', coTrip.dest.code === 'PRYJ' && coTrip.trainNumber === '12417' && coTrip.mode === 'CAB');
