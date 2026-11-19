@@ -1,5 +1,6 @@
 // End-to-end smoke test against a running server:  BASE_URL=http://localhost:3000 npm run smoke
 // Run against a freshly seeded database (npm run db:reset) — it mutates data.
+import { idImage, blankImage, corruptPng } from './lib/idimage.mjs';
 const BASE = process.env.BASE_URL || 'http://localhost:3000';
 let pass = 0, fail = 0;
 const failures = [];
@@ -25,13 +26,6 @@ function check(name, cond, extra = '') {
 }
 const section = (t) => console.log(`\n▸ ${t}`);
 
-function fakePng(w = 900, h = 600) {
-  const b = Buffer.alloc(2048, 7);
-  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0);
-  b.writeUInt32BE(13, 8); b.write('IHDR', 12, 'ascii'); b.writeUInt32BE(w, 16); b.writeUInt32BE(h, 20);
-  b.writeUInt32BE(Math.floor(Math.random() * 4e9), 40); // unique bytes per call (duplicate-image check)
-  return b;
-}
 async function signupForm(client, token, fields, image) {
   const fd = new FormData();
   fd.set('signupToken', token);
@@ -67,34 +61,33 @@ const demo = async (email) => { const c = new Client(email); const r = await c.r
   check('wrong OTP rejected', (await anon.req('/api/auth/verify-otp', { body: { email, otp: otpRes.data.devOtp === '000000' ? '111111' : '000000' } })).status === 400);
   const ver = await anon.req('/api/auth/verify-otp', { body: { email, otp: otpRes.data.devOtp } });
   check('OTP verified → needs onboarding', ver.status === 200 && ver.data.needsOnboarding === true && !!ver.data.signupToken);
-  const base = { name: 'New Student', rollNumber: 'IIT2025999', department: 'B.Tech IT', hostel: 'GH-1', gender: 'FEMALE', confirmGenderLock: 'true', idType: 'AADHAAR', upiId: 'newstudent@okaxis' };
-  check('signup WITHOUT ID image rejected', (await signupForm(anon, ver.data.signupToken, base, null)).data?.code === 'ID_IMAGE_REQUIRED');
-  check('signup with a text file as "ID" rejected', (await signupForm(anon, ver.data.signupToken, base, Buffer.from('not an image'.repeat(10)))).data?.code === 'ID_IMAGE_INVALID');
-  check('signup with tiny image rejected', (await signupForm(anon, ver.data.signupToken, base, fakePng(100, 80))).data?.code === 'ID_IMAGE_INVALID');
-  check('signup without ID type rejected', (await signupForm(anon, ver.data.signupToken, { ...base, idType: 'COLLEGE_ID' }, fakePng())).data?.code === 'ID_TYPE_REQUIRED');
-  check('invalid roll number rejected', (await signupForm(anon, ver.data.signupToken, { ...base, rollNumber: 'BAD123' }, fakePng())).status === 400);
-  check('gender-lock confirmation required', (await signupForm(anon, ver.data.signupToken, { ...base, confirmGenderLock: 'false' }, fakePng())).status === 400);
-  const idPng = fakePng();
-  const su = await signupForm(anon, ver.data.signupToken, base, idPng);
-  check('signup succeeds (201) and is PENDING review', su.status === 201 && su.data.user.idCardStatus === 'PENDING' && su.data.pendingReview === true);
-  check('pending user has trust 0 and gender not yet locked', su.data.user.trustScore === 0 && su.data.user.genderLocked === false);
+  const base = { name: 'Priya Nair', rollNumber: 'IIT2025999', department: 'B.Tech IT', hostel: 'GH-1', confirmGenderLock: 'true', idType: 'AADHAAR', upiId: 'newstudent@okaxis' };
+  const ok1 = (r, code) => r.data?.code === code;
+  check('signup WITHOUT ID image rejected', ok1(await signupForm(anon, ver.data.signupToken, base, null), 'ID_IMAGE_REQUIRED'));
+  check('text file as "ID" rejected', ok1(await signupForm(anon, ver.data.signupToken, base, Buffer.from('not an image'.repeat(10))), 'ID_IMAGE_INVALID'));
+  check('signup without a valid ID type rejected', ok1(await signupForm(anon, ver.data.signupToken, { ...base, idType: 'COLLEGE_ID' }, await idImage({ name: 'PRIYA NAIR' })), 'ID_TYPE_REQUIRED'));
+  check('invalid roll number rejected', (await signupForm(anon, ver.data.signupToken, { ...base, rollNumber: 'BAD123' }, await idImage({ name: 'PRIYA NAIR' }))).status === 400);
+  check('gender-lock acknowledgement required', (await signupForm(anon, ver.data.signupToken, { ...base, confirmGenderLock: 'false' }, await idImage({ name: 'PRIYA NAIR' }))).status === 400);
+  check('corrupt image (valid header) rejected as unreadable', ok1(await signupForm(anon, ver.data.signupToken, base, corruptPng()), 'ID_UNREADABLE'));
+  check('image without any gender text rejected (ID_GENDER_UNREADABLE)', ok1(await signupForm(anon, ver.data.signupToken, base, await blankImage()), 'ID_GENDER_UNREADABLE'));
+  check('name that is not on the ID rejected', ok1(await signupForm(anon, ver.data.signupToken, { ...base, name: 'Rahul Verma' }, await idImage({ name: 'PRIYA NAIR' })), 'ID_NAME_MISMATCH'));
+  check('ID of a different type than selected rejected', ok1(await signupForm(anon, ver.data.signupToken, { ...base, idType: 'PASSPORT' }, await idImage({ name: 'PRIYA NAIR', type: 'AADHAAR' })), 'ID_TYPE_MISMATCH'));
+  check('conflicting gender text rejected', ok1(await signupForm(anon, ver.data.signupToken, base, await idImage({ name: 'PRIYA NAIR', gender: 'Male', extra: 'Female' })), 'ID_GENDER_AMBIGUOUS'));
+  const idPng = await idImage({ name: 'PRIYA NAIR', gender: 'Female' });
+  const su = await signupForm(anon, ver.data.signupToken, { ...base, gender: 'MALE' /* ignored: gender comes from the ID */ }, idPng);
+  check('signup succeeds (201) and is VERIFIED immediately', su.status === 201 && su.data.user.idCardStatus === 'VERIFIED');
+  check('gender is read from the ID (FEMALE), not the form (MALE)', su.data.user.gender === 'FEMALE');
+  check('gender locked, trust = base 50, no student-affairs step needed', su.data.user.genderLocked === true && su.data.user.trustScore === 50);
   const newUserId = su.data.user.id;
   const dup = await newUserToken(new Client('d'), 'dup');
   check('same ID image cannot be reused on another account', (await signupForm(new Client('d2'), dup.token, { ...base, rollNumber: 'IIT2025998' }, idPng)).status === 409);
-  check('same roll number cannot re-register', (await signupForm(new Client('d3'), dup.token, base, fakePng())).status === 409);
+  check('same roll number cannot re-register', (await signupForm(new Client('d3'), dup.token, base, await idImage({ name: 'PRIYA NAIR' }))).status === 409);
   const patch = await anon.req('/api/profile', { method: 'PATCH', body: { gender: 'MALE' } });
   check('gender edit blocked (GENDER_LOCKED)', patch.status === 400 && patch.data.code === 'GENDER_LOCKED');
-
-  section('Unverified (pending) users are restricted');
-  const placesP = (await anon.req('/api/places')).data.places;
-  const pidP = (c) => placesP.find((p) => p.code === c).id;
-  const peekDay = (await anon.req('/api/meta')).data.settings.breakStart;
-  const legP = { originId: pidP('IIITA-G1'), destId: pidP('PRYJ'), date: peekDay, windowStart: '10:00', windowEnd: '11:00', mode: 'CAB', vehicleType: 'SEDAN4', luggage: 1, genderPref: 'MIXED' };
-  const cj = await anon.req('/api/journeys', { body: { legs: [legP], autoMatch: false } });
-  check('pending user cannot plan trips (NOT_VERIFIED)', cj.status === 403 && cj.data.code === 'NOT_VERIFIED');
-  const pendSearch = await anon.req('/api/trips/search');
-  check('pending (even declared FEMALE) user sees ONLY mixed crews', pendSearch.status === 200 && pendSearch.data.trips.length > 0 && pendSearch.data.trips.every((t) => t.genderPref === 'MIXED'));
-  check('pending user cannot opt in to buddy visibility', (await anon.req('/api/buddies/visibility', { body: { visible: true } })).status === 403);
+  const maleTok = await newUserToken(new Client('m'), 'male');
+  const maleC = new Client('mc');
+  const ms = await signupForm(maleC, maleTok.token, { ...base, name: 'Arjun Das', rollNumber: 'IIT2025777' }, await idImage({ name: 'ARJUN DAS', gender: 'Male', type: 'AADHAAR' }));
+  check('male ID → MALE account', ms.status === 201 && ms.data.user.gender === 'MALE');
 
   section('Demo accounts & seeded data');
   const ananya = await demo('student.female@iiita.ac.in');
@@ -109,35 +102,18 @@ const demo = async (email) => { const c = new Client(email); const r = await c.r
   check('non-demo email rejected for demo login', (await new Client('z').req('/api/auth/demo', { body: { email: 'priya.nair@iiita.ac.in' } })).status === 403);
   check('admin role', (await me(admin)).role === 'ADMIN');
 
-  section('Admin government-ID review');
-  const q = (await admin.req('/api/admin/verifications')).data;
-  const mine = q.queue.find((u) => u.id === newUserId);
-  check('admin queue lists the pending student with ID image', !!mine && !!mine.image && mine.idType === 'AADHAAR');
-  check('student cannot read the verification queue', (await rohan.req('/api/admin/verifications')).status === 403);
-  const imgRes = await admin.req(`/api/admin/verifications/${newUserId}/image`, { raw: true });
-  check('admin can fetch ID image (private, no-store)', imgRes.status === 200 && imgRes.headers.get('content-type') === 'image/png' && /no-store/.test(imgRes.headers.get('cache-control')));
-  check('students cannot fetch ID images', (await rohan.req(`/api/admin/verifications/${newUserId}/image`, { raw: true })).status === 403);
-  check('anonymous cannot fetch ID images', (await new Client('q').req(`/api/admin/verifications/${newUserId}/image`, { raw: true })).status === 403);
-  check('approve requires explicit confirmation', (await admin.req(`/api/admin/verifications/${newUserId}`, { body: { action: 'approve' } })).status === 400);
-  const rej = await newUserToken(new Client('r'), 'rej');
-  const rejC = new Client('rejc');
-  const rejSignup = await signupForm(rejC, rej.token, { ...base, rollNumber: 'IIT2025888', name: 'Rejected Person' }, fakePng());
-  check('second student signs up', rejSignup.status === 201);
-  check('reject requires a reason', (await admin.req(`/api/admin/verifications/${rejSignup.data.user.id}`, { body: { action: 'reject' } })).status === 400);
-  check('admin rejects with reason', (await admin.req(`/api/admin/verifications/${rejSignup.data.user.id}`, { body: { action: 'reject', reason: 'Photo is blurry, gender not readable' } })).status === 200);
-  const rejMe = (await rejC.req('/api/auth/me')).data.user;
-  check('rejected student sees reason', rejMe.idCardStatus === 'REJECTED' && /blurry/.test(rejMe.idRejectReason));
-  check('rejected ID image is deleted', (await admin.req(`/api/admin/verifications/${rejSignup.data.user.id}/image`, { raw: true })).status === 404);
-  const reup = new FormData(); reup.set('idType', 'PASSPORT'); reup.set('idImage', new Blob([fakePng()], { type: 'image/png' }), 'id.png');
-  const reupRes = await fetch(BASE + '/api/profile/id', { method: 'POST', body: reup, headers: { cookie: rejC.cookie } });
-  check('rejected student can re-upload an ID (back to PENDING)', reupRes.status === 200 && (await reupRes.json()).user.idCardStatus === 'PENDING');
-  const ap = await admin.req(`/api/admin/verifications/${newUserId}`, { body: { action: 'approve', confirmed: true, gender: 'FEMALE' } });
-  check('admin approves (gender confirmed)', ap.status === 200);
-  check('approved ID image is deleted after review', (await admin.req(`/api/admin/verifications/${newUserId}/image`, { raw: true })).status === 404);
-  const approved = (await anon.req('/api/auth/me')).data.user;
-  check('approved: VERIFIED, gender locked, trust = base 50', approved.idCardStatus === 'VERIFIED' && approved.genderLocked === true && approved.trustScore === 50);
-  check('approved student can now plan trips', (await anon.req('/api/journeys', { body: { legs: [legP], autoMatch: false } })).status === 201);
-  check('verified student can no longer replace the ID', (await (async () => { const f2 = new FormData(); f2.set('idType', 'AADHAAR'); f2.set('idImage', new Blob([fakePng()], { type: 'image/png' }), 'x.png'); return fetch(BASE + '/api/profile/id', { method: 'POST', body: f2, headers: { cookie: anon.cookie } }); })()).status === 403);
+  section('Verified-at-signup users');
+  const pend = (await anon.req('/api/trips/search')).data;
+  check('new verified (female) student sees girls-only crews', pend.trips.some((t) => t.genderPref === 'GIRLS_ONLY'));
+  check('male-ID student never sees girls-only crews', (await maleC.req('/api/trips/search')).data.trips.every((t) => t.genderPref !== 'GIRLS_ONLY'));
+  check('admin ID-review queue no longer exists', (await admin.req('/api/admin/verifications', { raw: true })).status === 404);
+  check('admin can correct a misread gender', (await admin.req(`/api/admin/users/${ms.data.user.id}`, { body: { action: 'setGender', gender: 'OTHER' } })).status === 200 && (await maleC.req('/api/auth/me')).data.user.gender === 'OTHER');
+  check('students cannot correct genders', (await rohan.req(`/api/admin/users/${ms.data.user.id}`, { body: { action: 'setGender', gender: 'MALE' } })).status === 403);
+  const peekDay = (await anon.req('/api/meta')).data.settings.breakStart;
+  const placesP = (await anon.req('/api/places')).data.places;
+  const legP = { originId: placesP.find((p) => p.code === 'IIITA-G1').id, destId: placesP.find((p) => p.code === 'PRYJ').id, date: peekDay, windowStart: '10:00', windowEnd: '11:00', mode: 'CAB', vehicleType: 'SEDAN4', luggage: 1, genderPref: 'MIXED' };
+  check('verified-at-signup student can plan trips straight away', (await anon.req('/api/journeys', { body: { legs: [legP], autoMatch: false } })).status === 201);
+  check('verified student cannot re-run ID verification', (await (async () => { const f2 = new FormData(); f2.set('idType', 'AADHAAR'); f2.set('idImage', new Blob([await idImage({ name: 'PRIYA NAIR' })], { type: 'image/png' }), 'x.png'); return fetch(BASE + '/api/profile/id', { method: 'POST', body: f2, headers: { cookie: anon.cookie } }); })()).status === 403);
 
   section('Gender hard filter');
   const rSearch = await rohan.req('/api/trips/search');

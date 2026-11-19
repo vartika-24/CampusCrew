@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  experimental: { instrumentationHook: true, serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs'] },
+  experimental: { instrumentationHook: true, serverComponentsExternalPackages: ['@prisma/client', 'bcryptjs', 'sharp', 'tesseract.js', '@tesseract.js-data/eng'] },
   async headers() {
     return [
       {

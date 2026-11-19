@@ -43,7 +43,7 @@ export type Place = { id: string; code: string; name: string; kind: string; city
 export type Me = {
   id: string; email: string; name: string; role: string; department: string; year: number; hostel: string | null; gender: string; genderLocked: boolean;
   rollNumber: string; idCardStatus: string; trustScore: number; completedRides: number; buddyVisible: boolean; upiId: string | null; ratingAvg: number | null;
-  cancelCount: number; lateCancels: number; idType: string | null; idRejectReason: string | null; isDemo: boolean;
+  cancelCount: number; lateCancels: number; idType: string | null; isDemo: boolean;
 };
 export type Member = {
   userId: string; name: string; firstName: string; department: string; year: number; hostel: string | null; gender: string; trustScore: number; verified: boolean;

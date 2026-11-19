@@ -3,6 +3,7 @@
 // Usage: npm run build && node scripts/smoke-prod.mjs
 import { spawn, execSync } from 'node:child_process';
 import http from 'node:http';
+import { idImage } from './lib/idimage.mjs';
 
 const PORT = 3200, MOCK = 3201, BASE = `http://127.0.0.1:${PORT}`;
 const ADMIN = 'warden.office@iiita.ac.in';
@@ -35,7 +36,6 @@ class Client {
     return { status: res.status, data };
   }
 }
-const png = () => { const b = Buffer.alloc(2048, 5); Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0); b.writeUInt32BE(13, 8); b.write('IHDR', 12, 'ascii'); b.writeUInt32BE(1000, 16); b.writeUInt32BE(640, 20); b.writeUInt32BE(Math.floor(Math.random() * 4e9), 60); return b; };
 const lastMailTo = (to) => [...mails].reverse().find((m) => m.body.to[0].email === to);
 const codeFrom = (m) => m.body.textContent.match(/\b(\d{6})\b/)[1];
 async function login(c, email) {
@@ -91,19 +91,16 @@ try {
   check('settings saved (campus helpline added)', (await admin.req('/api/admin/settings', { method: 'PUT', body: { campusName: 'IIIT Allahabad', helplines: [{ label: 'Campus Security', number: '0532 000 0000' }, { label: 'Police', number: '112' }], hostels: ['BH-1', 'GH-1'], departments: ['B.Tech IT'], shuttleSeats: 40, breakStart: '', breakEnd: '', breakLabel: '', returnDate: '' } })).status === 200);
   check('helpline setting reaches /api/meta', (await anon.req('/api/meta')).data.helplines[0].label === 'Campus Security');
 
-  section('Student: ID is mandatory; admin verifies; email notification');
-  const fd = (withImg) => { const f = new FormData(); f.set('signupToken', ver.data.signupToken); Object.entries({ name: 'Real Student', rollNumber: 'IIT2023055', department: 'B.Tech IT', hostel: 'GH-1', gender: 'FEMALE', confirmGenderLock: 'true', idType: 'AADHAAR' }).forEach(([k, v]) => f.set(k, v)); if (withImg) f.set('idImage', new Blob([png()], { type: 'image/png' }), 'aadhaar.png'); return f; };
-  check('no image → rejected', (await stu.req('/api/auth/signup', { form: fd(false) })).status === 400);
-  check('hostel list comes from admin settings (unknown hostel rejected)', (await (async () => { const f = fd(true); f.set('hostel', 'BH-9'); return stu.req('/api/auth/signup', { form: f }); })()).status === 400);
-  const su = await stu.req('/api/auth/signup', { form: fd(true) });
-  check('signup → pending review', su.status === 201 && su.data.user.idCardStatus === 'PENDING');
-  const q = (await admin.req('/api/admin/verifications')).data;
-  check('admin sees exactly one pending ID', q.queue.length === 1 && q.queue[0].email === email);
-  check('admin approves', (await admin.req(`/api/admin/verifications/${su.data.user.id}`, { body: { action: 'approve', confirmed: true, gender: 'FEMALE' } })).status === 200);
-  const vm = lastMailTo(email);
-  check('approval email sent to the student', !!vm && /verified/i.test(vm.body.subject));
+  section('Student: government ID read automatically (no Student Affairs step)');
+  const fd = async (withImg, over = {}) => { const f = new FormData(); f.set('signupToken', ver.data.signupToken); Object.entries({ name: 'Real Student', rollNumber: 'IIT2023055', department: 'B.Tech IT', hostel: 'GH-1', confirmGenderLock: 'true', idType: 'AADHAAR', gender: 'MALE', ...over }).forEach(([k, v]) => f.set(k, v)); if (withImg) f.set('idImage', new Blob([await idImage({ name: 'REAL STUDENT', gender: 'Female' })], { type: 'image/png' }), 'aadhaar.png'); return f; };
+  check('no image → rejected', (await stu.req('/api/auth/signup', { form: await fd(false) })).status === 400);
+  check('hostel list comes from admin settings (unknown hostel rejected)', (await stu.req('/api/auth/signup', { form: await fd(true, { hostel: 'BH-9' }) })).status === 400);
+  const su = await stu.req('/api/auth/signup', { form: await fd(true) });
+  check('signup → VERIFIED immediately', su.status === 201 && su.data.user.idCardStatus === 'VERIFIED');
+  check('gender comes from the ID (FEMALE) even though the form said MALE', su.data.user.gender === 'FEMALE' && su.data.user.genderLocked === true);
   check('student is verified and gender locked', (await stu.req('/api/auth/me')).data.user.genderLocked === true);
-  check('students cannot use admin endpoints (403)', (await stu.req('/api/admin/places', { body: { code: 'XX', name: 'Fake place', kind: 'CAMPUS', city: 'X', lat: 1, lng: 1 } })).status === 403);
+  check('ID review queue does not exist', (await admin.req('/api/admin/verifications', { raw: true })).status === 404);
+  check('ID image is not stored anywhere (no ID endpoint serves it)', (await admin.req(`/api/admin/verifications/${su.data.user.id}/image`, { raw: true })).status === 404);
 
   section('Trip + real GPS tracking (no simulation)');
   const date = addDays(new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10), 1);
@@ -133,8 +130,7 @@ try {
   section('Other production behaviours');
   check('surge planner reports not enough data (no fake demand)', (await stu.req('/api/surge')).data.hasData === false);
   const users = (await admin.req('/api/admin/users')).data.users;
-  check('student list contains only real signups', users.every((u) => !/student\.(fe)?male|lowtrust/.test(u.email)));
-  check('unauthenticated ID image access denied', (await anon.req(`/api/admin/verifications/${su.data.user.id}/image`, { raw: true })).status === 403);
+  check('student list contains only real signups', users.length === 1 && users[0].email === email);
 
   console.log(`\n${fail === 0 ? '✅' : '❌'} ${pass} passed, ${fail} failed`);
   if (fail) console.log('Failures:\n - ' + failures.join('\n - '));

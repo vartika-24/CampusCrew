@@ -10,15 +10,15 @@ import { EmptyState, ErrorBox, PageLoader, SectionTitle, Stat, TrustBadge } from
 import { api, fmtDate, fmtTimeAgo, rupees } from '@/lib/client';
 import { useData } from '@/lib/useData';
 import { REPORT_TYPE_LABEL } from '@/lib/constants';
-import { OperatorsTab, PlacesTab, SettingsTab, VerificationTab } from '@/components/admin/AdminTabs';
+import { OperatorsTab, PlacesTab, SettingsTab } from '@/components/admin/AdminTabs';
 
-type Overview = { pendingIds: number; students: number; verified: number; suspended: number; openTrips: number; liveTrips: number; completed: number; todaysTrips: number; activeSos: number; openReports: number; lowTrust: number; eco: { moneySaved: number; co2Kg: number; cabsEliminated: number; trips: number } };
+type Overview = { students: number; verified: number; suspended: number; openTrips: number; liveTrips: number; completed: number; todaysTrips: number; activeSos: number; openReports: number; lowTrust: number; eco: { moneySaved: number; co2Kg: number; cabsEliminated: number; trips: number } };
 type Demand = { date: string; hours: { hour: number; label: string; junction: number; airport: number; total: number; multiplier: number; buses: number }[]; plan: { time: string; to: string; buses: number; students: number }[]; shuttleSeats: number; totalBuses: number; totalStudents: number; dates: string[] };
 type Alert = { approximate?: boolean; id: string; status: string; lat: number; lng: number; note: string | null; createdAt: string; resolvedAt: string | null; resolvedNote: string | null; rider: { name: string; hostel: string | null; department: string; trustScore: number }; trip: { id: string; route: string; plate: string | null; driver: string | null; riders: string[]; status: string } };
 type Report = { id: string; type: string; status: string; description: string; resolution: string | null; createdAt: string; reporter: { name: string }; target: { id: string; name: string; trustScore: number; suspended: boolean; hostel: string | null } | null; trip: string | null };
-type User = { id: string; name: string; email: string; department: string; hostel: string | null; trustScore: number; completedRides: number; cancelCount: number; lateCancels: number; suspended: boolean };
+type User = { id: string; name: string; email: string; gender: string; department: string; hostel: string | null; trustScore: number; completedRides: number; cancelCount: number; lateCancels: number; suspended: boolean };
 
-const TABS = [['overview', 'Overview'], ['verification', 'ID verification'], ['demand', 'Demand & shuttles'], ['safety', 'Safety queue'], ['users', 'Students'], ['places', 'Places'], ['operators', 'Operators'], ['settings', 'Settings']] as const;
+const TABS = [['overview', 'Overview'], ['demand', 'Demand & shuttles'], ['safety', 'Safety queue'], ['users', 'Students'], ['places', 'Places'], ['operators', 'Operators'], ['settings', 'Settings']] as const;
 
 function Console() {
   const { user } = useAuth();
@@ -33,7 +33,6 @@ function Console() {
         {TABS.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => router.push(k === 'overview' ? '/admin' : `/admin?tab=${k}`)} className={`whitespace-nowrap rounded-lg px-4 py-1.5 ${tab === k ? 'bg-white shadow' : 'text-slate-600'}`}>{l}</button>)}
       </div>
       {tab === 'overview' && <OverviewTab />}
-      {tab === 'verification' && <VerificationTab />}
       {tab === 'places' && <PlacesTab />}
       {tab === 'operators' && <OperatorsTab />}
       {tab === 'settings' && <SettingsTab />}
@@ -52,7 +51,6 @@ function OverviewTab() {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="IDs to review" value={d.pendingIds} tone={d.pendingIds ? 'warn' : 'eco'} icon={<ShieldCheck className="h-5 w-5" />} sub="government ID queue" />
         <Stat label="Active SOS" value={d.activeSos} tone={d.activeSos ? 'danger' : 'eco'} icon={<Siren className="h-5 w-5" />} sub="needs response" />
         <Stat label="Open reports" value={d.openReports} tone="warn" icon={<ShieldAlert className="h-5 w-5" />} />
         <Stat label="Verified students" value={`${d.verified}/${d.students}`} icon={<Users className="h-5 w-5" />} sub={`${d.lowTrust} below trust 70`} />
@@ -62,7 +60,7 @@ function OverviewTab() {
         <Stat label="CO₂ avoided" value={`${d.eco.co2Kg} kg`} tone="eco" icon={<Leaf className="h-5 w-5" />} sub={`${d.eco.cabsEliminated} solo cabs`} />
         <Stat label="Suspended" value={d.suspended} tone="warn" icon={<UserX className="h-5 w-5" />} />
       </div>
-      <div className="grid gap-3 sm:grid-cols-3"><Link href="/admin?tab=verification" className="card p-4 font-semibold text-brand-700 hover:shadow-lg">Review student IDs →</Link><Link href="/admin?tab=safety" className="card p-4 font-semibold text-brand-700 hover:shadow-lg">Open safety moderation queue →</Link><Link href="/admin?tab=demand" className="card p-4 font-semibold text-brand-700 hover:shadow-lg">Plan institute shuttles →</Link></div>
+      <div className="grid gap-3 sm:grid-cols-2"><Link href="/admin?tab=safety" className="card p-4 font-semibold text-brand-700 hover:shadow-lg">Open safety moderation queue →</Link><Link href="/admin?tab=demand" className="card p-4 font-semibold text-brand-700 hover:shadow-lg">Plan institute shuttles →</Link></div>
     </div>
   );
 }
@@ -133,14 +131,14 @@ function SafetyTab() {
 function UsersTab() {
   const u = useData<{ users: User[] }>('/api/admin/users');
   const toast = useToast();
-  async function act(id: string, action: 'suspend' | 'unsuspend') {
-    try { await api(`/api/admin/users/${id}`, { body: { action } }); toast.push('success', action === 'suspend' ? 'Suspended' : 'Reinstated'); u.reload(); } catch (e) { toast.push('error', (e as Error).message); }
+  async function act(id: string, action: 'suspend' | 'unsuspend' | 'setGender', gender?: string) {
+    try { await api(`/api/admin/users/${id}`, { body: { action, gender } }); toast.push('success', action === 'suspend' ? 'Suspended' : action === 'setGender' ? 'Gender corrected' : 'Reinstated'); u.reload(); } catch (e) { toast.push('error', (e as Error).message); }
   }
   if (u.loading && !u.data) return <PageLoader />;
   if (u.error || !u.data) return <ErrorBox message={u.error || 'Failed'} onRetry={u.reload} />;
   return (
     <div className="card overflow-x-auto"><table className="w-full min-w-[640px] text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-2 text-left">Student</th><th className="text-left">Dept · Hostel</th><th className="text-center">Trust</th><th className="text-center">Rides</th><th className="text-center">Cancels</th><th className="pr-4 text-right">Action</th></tr></thead>
-      <tbody>{u.data.users.map((s) => <tr key={s.id} className="border-t border-slate-100"><td className="px-4 py-2"><div className="font-semibold">{s.name}</div><div className="text-xs text-slate-400">{s.email}</div></td><td>{s.department} · {s.hostel}</td><td className="text-center"><TrustBadge score={s.trustScore} /></td><td className="text-center">{s.completedRides}</td><td className="text-center">{s.cancelCount} ({s.lateCancels} late)</td><td className="pr-4 text-right">{s.suspended ? <button className="btn-secondary btn-sm" onClick={() => act(s.id, 'unsuspend')}>Reinstate</button> : <button className="btn-ghost btn-sm text-red-600" onClick={() => confirm(`Suspend ${s.name}?`) && act(s.id, 'suspend')}>Suspend</button>}</td></tr>)}</tbody></table></div>
+      <tbody>{u.data.users.map((s) => <tr key={s.id} className="border-t border-slate-100"><td className="px-4 py-2"><div className="font-semibold">{s.name}</div><div className="text-xs text-slate-400">{s.email}</div></td><td>{s.department} · {s.hostel}</td><td className="text-center"><TrustBadge score={s.trustScore} /></td><td className="text-center">{s.completedRides}</td><td className="text-center">{s.cancelCount} ({s.lateCancels} late)</td><td className="pr-4 text-right"><select className="mr-2 rounded-lg border border-slate-200 px-1 py-1 text-xs" value={s.gender} onChange={(e) => confirm(`Change ${s.name}'s gender to ${e.target.value}? Only do this to fix an ID-reading mistake.`) && act(s.id, 'setGender', e.target.value)} aria-label={`Gender of ${s.name}`}><option value="FEMALE">Female</option><option value="MALE">Male</option><option value="OTHER">Other</option></select>{s.suspended ? <button className="btn-secondary btn-sm" onClick={() => act(s.id, 'unsuspend')}>Reinstate</button> : <button className="btn-ghost btn-sm text-red-600" onClick={() => confirm(`Suspend ${s.name}?`) && act(s.id, 'suspend')}>Suspend</button>}</td></tr>)}</tbody></table></div>
   );
 }
 

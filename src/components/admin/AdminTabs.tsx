@@ -1,72 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, MapPin, ShieldCheck, Trash2, Truck, XCircle } from 'lucide-react';
+import { MapPin, Trash2, Truck } from 'lucide-react';
 import { useToast } from '@/components/Providers';
 import { EmptyState, ErrorBox, Field, PageLoader, SectionTitle } from '@/components/ui';
-import { api, fmtTimeAgo } from '@/lib/client';
+import { api } from '@/lib/client';
 import { useData } from '@/lib/useData';
-
-type Q = { id: string; name: string; email: string; rollNumber: string; department: string; year: number; hostel: string | null; gender: string; idTypeLabel: string | null; submittedAt: string | null; image: { width: number; height: number } | null; duplicateIdImage: boolean };
-
-export function VerificationTab() {
-  const v = useData<{ pending: number; queue: Q[]; recent: { id: string; name: string; status: string; reviewedAt: string | null; reason: string | null }[] }>('/api/admin/verifications', { poll: 15000 });
-  const toast = useToast();
-  const [gender, setGender] = useState<Record<string, string>>({});
-  const [ok, setOk] = useState<Record<string, boolean>>({});
-  const [reason, setReason] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState<string | null>(null);
-
-  async function decide(u: Q, action: 'approve' | 'reject') {
-    setBusy(u.id);
-    try {
-      await api(`/api/admin/verifications/${u.id}`, { body: action === 'approve' ? { action, confirmed: !!ok[u.id], gender: gender[u.id] ?? u.gender } : { action, reason: reason[u.id] ?? '' } });
-      toast.push('success', action === 'approve' ? `${u.name} verified` : `${u.name} rejected`);
-      v.reload();
-    } catch (e) { toast.push('error', (e as Error).message); } finally { setBusy(null); }
-  }
-
-  if (v.loading && !v.data) return <PageLoader />;
-  if (v.error || !v.data) return <ErrorBox message={v.error || 'Failed'} onRetry={v.reload} />;
-  return (
-    <div className="space-y-5">
-      <SectionTitle title="Government ID review" sub="Compare the photo, name and gender on the ID with what the student entered. Images are deleted as soon as you decide." />
-      {v.data.queue.length === 0 ? <EmptyState icon={<ShieldCheck className="h-6 w-6" />} title="No IDs waiting" hint="New signups appear here for review." /> : (
-        <div className="space-y-4">{v.data.queue.map((u) => (
-          <div key={u.id} className="card grid gap-4 p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]" data-testid="verification-item">
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/api/admin/verifications/${u.id}/image`} alt={`ID of ${u.name}`} className="max-h-96 w-full object-contain" />
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="text-lg font-extrabold text-slate-900">{u.name}</div>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-slate-600">
-                <dt className="font-semibold">Email</dt><dd className="break-all">{u.email}</dd>
-                <dt className="font-semibold">Roll no.</dt><dd className="font-mono">{u.rollNumber}</dd>
-                <dt className="font-semibold">Course</dt><dd>{u.department} · Y{u.year} · {u.hostel}</dd>
-                <dt className="font-semibold">ID type</dt><dd>{u.idTypeLabel}</dd>
-                <dt className="font-semibold">Declared gender</dt><dd className="font-bold text-slate-900">{u.gender}</dd>
-                <dt className="font-semibold">Submitted</dt><dd>{u.submittedAt ? fmtTimeAgo(u.submittedAt) : '—'}</dd>
-              </dl>
-              {u.duplicateIdImage && <div className="flex items-start gap-2 rounded-lg bg-red-50 p-2 text-xs font-semibold text-red-800"><AlertTriangle className="h-4 w-4 shrink-0" />This exact image was also used on another account.</div>}
-              <div className="space-y-2 rounded-xl bg-slate-50 p-3">
-                <Field label="Gender on the ID">
-                  <select className="input" value={gender[u.id] ?? u.gender} onChange={(e) => setGender({ ...gender, [u.id]: e.target.value })}><option value="FEMALE">Female</option><option value="MALE">Male</option><option value="OTHER">Other</option></select>
-                </Field>
-                <label className="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" className="mt-0.5" checked={!!ok[u.id]} onChange={(e) => setOk({ ...ok, [u.id]: e.target.checked })} data-testid="confirm-match" />I confirm the name, photo and gender on this ID match the profile. Gender will be locked.</label>
-                <button className="btn-eco w-full" disabled={busy === u.id || !ok[u.id]} onClick={() => decide(u, 'approve')} data-testid="approve-id"><CheckCircle2 className="h-4 w-4" />Approve & lock gender</button>
-              </div>
-              <div className="flex gap-2">
-                <input className="input" placeholder="Reason if rejecting (shown to the student)" value={reason[u.id] ?? ''} onChange={(e) => setReason({ ...reason, [u.id]: e.target.value })} />
-                <button className="btn-danger" disabled={busy === u.id || (reason[u.id] ?? '').trim().length < 5} onClick={() => decide(u, 'reject')} data-testid="reject-id"><XCircle className="h-4 w-4" />Reject</button>
-              </div>
-            </div>
-          </div>))}</div>
-      )}
-      {v.data.recent.length > 0 && <div className="card p-4"><h3 className="mb-2 font-bold text-slate-900">Recent decisions</h3><ul className="space-y-1 text-sm">{v.data.recent.map((r) => <li key={r.id} className="flex justify-between"><span>{r.name}</span><span className={r.status === 'VERIFIED' ? 'text-emerald-700' : 'text-red-700'}>{r.status === 'VERIFIED' ? 'Approved' : `Rejected${r.reason ? ': ' + r.reason : ''}`} · {r.reviewedAt ? fmtTimeAgo(r.reviewedAt) : ''}</span></li>)}</ul></div>}
-    </div>
-  );
-}
 
 type Place = { id: string; code: string; name: string; kind: string; city: string; lat: number; lng: number; isPublic: boolean };
 

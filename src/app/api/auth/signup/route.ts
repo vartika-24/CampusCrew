@@ -2,15 +2,19 @@ import { db } from '@/lib/db';
 import { ApiError, bad, conflict } from '@/lib/api';
 import { handle, ok } from '@/lib/api';
 import { publicUser, setSessionCookie, verifySignupToken } from '@/lib/auth';
-import { GENDERS, ROLL_REGEX } from '@/lib/constants';
-import { idDocumentCreate, readIdUpload } from '@/lib/idverify';
+import { ROLL_REGEX } from '@/lib/constants';
+import { verifyIdUpload } from '@/lib/idverify';
 import { getConfig } from '@/lib/settings';
 import { yearFromRoll } from '@/lib/validators';
 import { notify } from '@/lib/notify';
+import { computeTrust } from '@/lib/safety/trust';
 
 export const dynamic = 'force-dynamic';
 
-/** Multipart signup: profile fields + MANDATORY government-ID image. The account stays "pending" until an admin approves the ID. */
+/**
+ * Multipart signup with a MANDATORY government-ID photo. The ID is read automatically and the gender printed on it
+ * becomes the (locked) gender of the account. The photo is discarded after reading.
+ */
 export const POST = handle(async (req) => {
   let form: FormData;
   try { form = await req.formData(); } catch { throw bad('Send the signup as multipart form data'); }
@@ -29,31 +33,27 @@ export const POST = handle(async (req) => {
   if (!cfg.departments.includes(department)) throw bad('Pick a department from the list');
   const hostel = f('hostel');
   if (!cfg.hostels.includes(hostel)) throw bad('Pick a hostel from the list');
-  const gender = f('gender');
-  if (!(GENDERS as readonly string[]).includes(gender)) throw bad('Select the gender printed on your ID');
-  if (f('confirmGenderLock') !== 'true') throw bad('Please confirm that gender is locked after verification', 'GENDER_LOCK_UNCONFIRMED');
+  if (f('confirmGenderLock') !== 'true') throw bad('Please confirm that the gender read from your ID is locked on your profile', 'GENDER_LOCK_UNCONFIRMED');
   const upiId = f('upiId');
   if (upiId && !/^[\w.-]{2,}@[a-z]{2,}$/i.test(upiId)) throw bad('UPI ID looks like name@bank');
 
-  const id = await readIdUpload(form); // throws if the image is missing / not a real image / too small / duplicate
+  const id = await verifyIdUpload(req, form, { name, email }); // throws 400/409/422/429 with a helpful message
 
+  const trustScore = computeTrust({ verified: true, completedRides: 0, ratingSum: 0, ratingCount: 0, punctualCount: 0, cancelCount: 0, lateCancels: 0, unresolvedReports: 0, adminAdjust: 0 });
   let user;
   try {
     user = await db.user.create({
       data: {
-        email, name, rollNumber, department, hostel, gender, year: yearFromRoll(rollNumber), upiId: upiId || null,
-        emailVerified: true, idCardStatus: 'PENDING', idType: id.idType, idDocHash: id.hash, idSubmittedAt: new Date(),
-        genderLocked: false, trustScore: 0, lastLoginAt: new Date(),
-        idDocuments: { create: idDocumentCreate(id) },
+        email, name, rollNumber, department, hostel, gender: id.gender, year: yearFromRoll(rollNumber), upiId: upiId || null,
+        emailVerified: true, idCardStatus: 'VERIFIED', genderLocked: true, idType: id.idType, idDocHash: id.hash, idSubmittedAt: new Date(),
+        trustScore, lastLoginAt: new Date(),
       },
     });
   } catch (e) {
     if ((e as { code?: string }).code === 'P2002') throw new ApiError(409, 'An account with these details already exists.', 'CONFLICT');
     throw e;
   }
-  await notify(user.id, 'INFO', 'ID submitted for review', 'Student Affairs will verify your ID and gender. You will be emailed once it is approved.', '/profile');
-  const admins = await db.user.findMany({ where: { role: 'ADMIN', suspended: false }, select: { id: true } });
-  await Promise.all(admins.map((a) => notify(a.id, 'INFO', 'New ID to verify', `${name} (${rollNumber}) is waiting for ID review.`, '/admin?tab=verification')));
+  await notify(user.id, 'INFO', 'You are verified ✔', 'Your ID was read successfully and your gender is locked on your profile.', '/profile');
   await setSessionCookie(user.id);
-  return ok({ user: publicUser(user), pendingReview: true }, { status: 201 });
+  return ok({ user: publicUser(user), verified: true }, { status: 201 });
 });

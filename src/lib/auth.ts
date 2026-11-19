@@ -96,6 +96,6 @@ export function publicUser(u: User) {
     idCardStatus: u.idCardStatus, trustScore: u.trustScore, completedRides: u.completedRides,
     buddyVisible: u.buddyVisible, upiId: u.upiId, suspended: u.suspended,
     ratingAvg: u.ratingCount ? Math.round((u.ratingSum / u.ratingCount) * 10) / 10 : null,
-    cancelCount: u.cancelCount, lateCancels: u.lateCancels, idType: u.idType, idRejectReason: u.idRejectReason, isDemo: u.isDemo,
+    cancelCount: u.cancelCount, lateCancels: u.lateCancels, idType: u.idType, isDemo: u.isDemo,
   };
 }

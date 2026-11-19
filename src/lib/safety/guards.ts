@@ -55,9 +55,8 @@ export function assertNightAllowed(user: { trustScore: number }, window: Window)
   }
 }
 
-/** Booking, hosting and buddy features require an admin-verified government ID (and therefore a verified gender). */
+/** Booking, hosting and buddy features require a verified government ID (which also fixes the verified gender). */
 export function assertVerified(user: { idCardStatus: string; emailVerified: boolean }) {
   if (user.idCardStatus === 'VERIFIED' && user.emailVerified) return;
-  if (user.idCardStatus === 'REJECTED') throw forbidden('Your ID was not accepted. Open your profile to see why and upload a new one.', 'NOT_VERIFIED');
-  throw forbidden('Your ID is awaiting review by Student Affairs. You can book trips as soon as it is approved.', 'NOT_VERIFIED');
+  throw forbidden('Verify your government ID on your profile page to book trips.', 'NOT_VERIFIED');
 }

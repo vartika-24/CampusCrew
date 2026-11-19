@@ -9,7 +9,6 @@ export const dynamic = 'force-dynamic';
 export const GET = handle(async () => {
   await requireAdmin();
   const today = todayIST();
-  const pendingIds = await db.user.count({ where: { role: 'STUDENT', idCardStatus: 'PENDING', idDocuments: { some: {} } } });
   const [students, verified, suspended, openTrips, liveTrips, completed, todays, activeSos, openReports, lowTrust, eco] = await Promise.all([
     db.user.count({ where: { role: 'STUDENT' } }), db.user.count({ where: { role: 'STUDENT', idCardStatus: 'VERIFIED' } }), db.user.count({ where: { suspended: true } }),
     db.tripGroup.count({ where: { status: { in: ['OPEN', 'CONFIRMED'] }, date: { gte: today } } }), db.tripGroup.count({ where: { status: 'IN_PROGRESS' } }),
@@ -17,5 +16,5 @@ export const GET = handle(async () => {
     db.emergencyAlert.count({ where: { status: 'ACTIVE' } }), db.report.count({ where: { status: 'OPEN' } }), db.user.count({ where: { role: 'STUDENT', trustScore: { lt: 70 } } }),
     ecoSummary(),
   ]);
-  return ok({ pendingIds, students, verified, suspended, openTrips, liveTrips, completed, todaysTrips: todays, activeSos, openReports, lowTrust, eco: eco.campus, hostels: eco.hostels });
+  return ok({ students, verified, suspended, openTrips, liveTrips, completed, todaysTrips: todays, activeSos, openReports, lowTrust, eco: eco.campus, hostels: eco.hostels });
 });

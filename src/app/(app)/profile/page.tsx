@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BadgeCheck, Clock, Lock, ShieldCheck, Upload, XCircle } from 'lucide-react';
+import { BadgeCheck, Clock, Lock, ShieldCheck, Upload } from 'lucide-react';
 import { useAuth, useToast } from '@/components/Providers';
 import { ErrorBox, Field, PageLoader, TrustBadge } from '@/components/ui';
 import { api, type Me } from '@/lib/client';
@@ -13,7 +13,7 @@ export default function ProfilePage() {
   const { refresh } = useAuth();
   const p = useData<Prof>('/api/profile');
   const meta = useData<{ hostels: string[]; idTypes: { value: string; label: string }[] }>('/api/meta');
-  const [idf, setIdf] = useState({ idType: 'AADHAAR', gender: '', name: '' });
+  const [idf, setIdf] = useState({ idType: 'AADHAAR', name: '' });
   const [idFile, setIdFile] = useState<File | null>(null);
   const toast = useToast();
   const [upi, setUpi] = useState('');
@@ -43,19 +43,18 @@ export default function ProfilePage() {
         <div className="flex flex-wrap items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-brand-600 text-2xl font-extrabold text-white">{u.name[0]}</div>
           <div className="min-w-0 flex-1"><div className="text-lg font-extrabold text-slate-900">{u.name}</div><div className="text-sm text-slate-600">{u.email}</div><div className="mt-1 flex flex-wrap gap-1.5"><span className="badge bg-emerald-50 text-emerald-700"><BadgeCheck className="h-3 w-3" />ID {u.idCardStatus.toLowerCase()}</span><span className="chip">{u.rollNumber}</span><span className="chip">{u.department} · Year {u.year}</span></div></div>
           <TrustBadge score={u.trustScore} size="lg" /></div>
-        <div className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><Lock className="h-4 w-4 shrink-0 text-brand-600" /><span>Gender: <b>{u.gender === 'FEMALE' ? 'Female' : u.gender === 'MALE' ? 'Male' : 'Other'}</b> {u.genderLocked ? <span className="chip ml-1" data-testid="gender-locked">Locked</span> : <span className="chip ml-1">Unverified</span>} — {u.genderLocked ? 'verified against your ID and cannot be edited, keeping gendered trips safe.' : 'locks once Student Affairs approves your ID. Until then you only see mixed crews.'}</span></div>
+        <div className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><Lock className="h-4 w-4 shrink-0 text-brand-600" /><span>Gender: <b>{u.gender === 'FEMALE' ? 'Female' : u.gender === 'MALE' ? 'Male' : 'Other'}</b> {u.genderLocked ? <span className="chip ml-1" data-testid="gender-locked">Locked</span> : <span className="chip ml-1">Unverified</span>} — {u.genderLocked ? 'read from your government ID and cannot be edited, keeping gendered trips safe.' : 'locks once your ID is verified. Until then you only see mixed crews.'}</span></div>
       </div>
 
       {u.role !== 'ADMIN' && u.idCardStatus !== 'VERIFIED' && (
-        <div className={`card space-y-3 p-5 ${u.idCardStatus === 'REJECTED' ? 'border-red-300' : 'border-amber-300'}`} data-testid="verification-card">
-          <h2 className="flex items-center gap-2 font-bold text-slate-900">{u.idCardStatus === 'REJECTED' ? <XCircle className="h-5 w-5 text-red-600" /> : <Clock className="h-5 w-5 text-amber-600" />}{u.idCardStatus === 'REJECTED' ? 'ID not accepted' : 'ID under review'}</h2>
-          {u.idCardStatus === 'REJECTED' ? <p className="text-sm text-red-800"><b>Reason:</b> {u.idRejectReason ?? 'Not specified'}. Upload a new, clear photo below.</p> : <p className="text-sm text-slate-600">Student Affairs is checking your government ID. You can book trips once it is approved — you&apos;ll get an email. You can replace the photo if you uploaded the wrong one.</p>}
-          <form className="grid gap-3 sm:grid-cols-2" onSubmit={async (e) => { e.preventDefault(); if (!idFile) return; setBusy(true); try { const fd = new FormData(); fd.set('idType', idf.idType); fd.set('idImage', idFile); if (idf.gender) fd.set('gender', idf.gender); if (idf.name) fd.set('name', idf.name); const r = await fetch('/api/profile/id', { method: 'POST', body: fd }); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || 'Upload failed'); toast.push('success', 'ID submitted for review'); setIdFile(null); p.reload(); void refresh(); } catch (x) { toast.push('error', (x as Error).message); } finally { setBusy(false); } }}>
+        <div className="card space-y-3 border-amber-300 p-5" data-testid="verification-card">
+          <h2 className="flex items-center gap-2 font-bold text-slate-900"><Clock className="h-5 w-5 text-amber-600" />Verify your government ID</h2>
+          <p className="text-sm text-slate-600">Upload the front of your Aadhaar, passport, voter ID or driving licence. Your gender is read from it automatically and locked; the photo is not stored.</p>
+          <form className="grid gap-3 sm:grid-cols-2" onSubmit={async (e) => { e.preventDefault(); if (!idFile) return; setBusy(true); try { const fd = new FormData(); fd.set('idType', idf.idType); fd.set('idImage', idFile); if (idf.name) fd.set('name', idf.name); const r = await fetch('/api/profile/id', { method: 'POST', body: fd }); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || 'Verification failed'); toast.push('success', 'Verified!'); setIdFile(null); p.reload(); void refresh(); } catch (x) { toast.push('error', (x as Error).message); } finally { setBusy(false); } }}>
             <Field label="ID type"><select className="input" value={idf.idType} onChange={(e) => setIdf({ ...idf, idType: e.target.value })}>{(meta.data?.idTypes ?? []).map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></Field>
-            <Field label="Gender on ID"><select className="input" value={idf.gender} onChange={(e) => setIdf({ ...idf, gender: e.target.value })}><option value="">Keep ({u.gender.toLowerCase()})</option><option value="FEMALE">Female</option><option value="MALE">Male</option><option value="OTHER">Other</option></select></Field>
-            <Field label="Name on ID (if different)"><input className="input" value={idf.name} onChange={(e) => setIdf({ ...idf, name: e.target.value })} placeholder={u.name} /></Field>
-            <div className="flex items-end"><label className="btn-secondary w-full cursor-pointer"><Upload className="h-4 w-4" />{idFile ? idFile.name : 'Choose ID photo'}<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => setIdFile(e.target.files?.[0] ?? null)} /></label></div>
-            <button className="btn-primary sm:col-span-2" disabled={busy || !idFile}>Submit ID for review</button>
+            <Field label="Name on ID"><input className="input" value={idf.name} onChange={(e) => setIdf({ ...idf, name: e.target.value })} placeholder={u.name} /></Field>
+            <div className="sm:col-span-2"><label className="btn-secondary w-full cursor-pointer"><Upload className="h-4 w-4" />{idFile ? idFile.name : 'Choose ID photo'}<input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => setIdFile(e.target.files?.[0] ?? null)} /></label></div>
+            <button className="btn-primary sm:col-span-2" disabled={busy || !idFile}>{busy ? 'Reading your ID…' : 'Verify my ID'}</button>
           </form>
         </div>
       )}
