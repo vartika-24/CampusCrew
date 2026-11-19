@@ -6,6 +6,7 @@ Students plan single- or multi-leg journeys, get matched into safe crews, chat i
 
 > Runs out of the box: **Next.js 14 (App Router) + TypeScript + Tailwind + Prisma + SQLite**. No Docker, no cloud services.
 
+Live URL: https://campuscrew-b198.onrender.com/
 ## Quick start
 
 ```bash
