@@ -85,3 +85,7 @@ export function trackingFor(g: { id: string; mode: string; status: string; start
   const etaRemaining = g.status === 'IN_PROGRESS' || g.status === 'COMPLETED' ? Math.round(eta * (1 - progress)) : eta;
   return { route, km, etaMinutes: eta, etaRemaining, progress, position, simulationSeconds: simSecs };
 }
+
+export const messageDTO = (m: { id: string; kind: string; body: string; createdAt: Date; userId: string | null; user: { name: string } | null }) => ({
+  id: m.id, kind: m.kind, body: m.body, createdAt: m.createdAt.toISOString(), userId: m.userId, author: m.user ? m.user.name.split(' ')[0] : null,
+});

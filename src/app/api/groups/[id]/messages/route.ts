@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { forbidden, handle, ok, readJson, str } from '@/lib/api';
 import { requireUser } from '@/lib/auth';
 import { touchGroup } from '@/lib/matching/engine';
+import { messageDTO } from '@/lib/groups';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,10 +10,6 @@ async function assertChatMember(groupId: string, userId: string) {
   const m = await db.groupMember.findUnique({ where: { groupId_userId: { groupId, userId } } });
   if (!m || m.status !== 'JOINED') throw forbidden('Chat is only for matched riders in this trip', 'NOT_MEMBER');
 }
-
-export const messageDTO = (m: { id: string; kind: string; body: string; createdAt: Date; userId: string | null; user: { name: string } | null }) => ({
-  id: m.id, kind: m.kind, body: m.body, createdAt: m.createdAt.toISOString(), userId: m.userId, author: m.user ? m.user.name.split(' ')[0] : null,
-});
 
 export const GET = handle<{ id: string }>(async (req, { params }) => {
   const user = await requireUser();

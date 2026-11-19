@@ -1,7 +1,7 @@
 // Server-Sent Events: pushes new chat messages and group-state changes to matched riders.
 import { db } from '@/lib/db';
 import { getUserFromRequest } from '@/lib/auth';
-import { messageDTO } from '../messages/route';
+import { messageDTO } from '@/lib/groups';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';

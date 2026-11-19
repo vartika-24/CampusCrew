@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { SignJWT, jwtVerify } from 'jose';
 import { db } from './db';
 import { SESSION_COOKIE } from './constants';
@@ -37,7 +37,7 @@ export async function setSessionCookie(userId: string) {
   cookies().set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production' && process.env.INSECURE_COOKIES !== '1',
+    secure: headers().get('x-forwarded-proto') === 'https',
     path: '/',
     maxAge: 60 * 60 * 24 * 14,
   });

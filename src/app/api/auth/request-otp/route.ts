@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { randomInt } from 'node:crypto';
+import { randomInt } from 'crypto';
 import { db } from '@/lib/db';
 import { ApiError, bad, handle, ok, readJson, str } from '@/lib/api';
 import { isDemoMode } from '@/lib/auth';

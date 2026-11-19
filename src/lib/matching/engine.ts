@@ -1,5 +1,5 @@
 // DB-facing matching engine: candidate search, join/host, waitlist promotion, cancellation reshuffle.
-import { randomBytes, randomInt } from 'node:crypto';
+import { randomBytes, randomInt } from 'crypto';
 import type { Prisma, TripGroup, GroupMember, User, TripSegment, Place } from '@prisma/client';
 import { db } from '../db';
 import { ApiError, bad, conflict, forbidden, notFound } from '../api';

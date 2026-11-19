@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes } from 'crypto';
 import { db } from '../db';
 import { computeTrust } from '../safety/trust';
 import { splitFare } from '../fare';
@@ -210,7 +210,7 @@ export async function runSeed(): Promise<void> {
   ]);
   // Rohan: Cab (full SUV, Kabir waitlisted) -> Train 12417
   const [rLeg1, rLeg2] = await chain('R', 'Delhi via Prayagraj — End-Sem Break', [
-    { host: 'R', members: ['Ad', 'Ha', 'Si', 'Ni'], waitlist: ['K'], from: 'IIITA-G1', to: 'PRYJ', day: 2, start: '17:00', end: '18:30', veh: 'SUV6', status: 'CONFIRMED', plate: 'UP-70-HT-1156', luggage: { R: 1, Ad: 1, Ha: 1, Si: 1, Ni: 1, K: 2 } },
+    { host: 'R', members: ['Ad', 'Ha', 'Si', 'Ni', 'Ar'], waitlist: ['K'], from: 'IIITA-G1', to: 'PRYJ', day: 2, start: '17:00', end: '18:30', veh: 'SUV6', status: 'CONFIRMED', plate: 'UP-70-HT-1156', luggage: { R: 1, Ad: 1, Ha: 1, Si: 1, Ni: 1, Ar: 1, K: 1 } },
     { host: 'R', members: ['Ad', 'Ha'], from: 'PRYJ', to: 'NDLS', day: 2, start: '20:00', end: '20:40', mode: 'TRAIN', train: '12417', status: 'OPEN' },
   ]);
   void aLeg1; void aLeg2; void aLeg3; void rLeg2;
