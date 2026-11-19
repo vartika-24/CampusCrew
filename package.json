@@ -16,6 +16,7 @@
     "test": "tsx --test tests/*.test.ts",
     "smoke": "node scripts/smoke.mjs",
     "smoke:prod": "node scripts/smoke-prod.mjs",
+    "smoke:instant": "node scripts/smoke-instant.mjs",
     "postinstall": "prisma generate"
   },
   "prisma": {

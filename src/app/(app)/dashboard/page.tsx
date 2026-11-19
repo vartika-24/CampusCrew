@@ -27,7 +27,7 @@ export default function Dashboard() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900">Hi {user.name.split(' ')[0]} 👋</h1>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600"><VerifiedBadge label="ID verified" /><span>{user.department} · {user.hostel}</span></div>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600"><VerifiedBadge label={user.idType ? 'ID verified' : 'IIITA student'} /><span>{user.department} · {user.hostel}</span></div>
         </div>
         <Link href="/trips/new" className="btn-primary"><Plus className="h-4 w-4" />Plan a trip</Link>
       </div>
@@ -38,9 +38,6 @@ export default function Dashboard() {
           <div className="min-w-0 flex-1 text-sm"><b>Booking locked — {rupees(totalDue)} unsettled.</b> {dues[0].route}. Pay your co-rider to join or create trips again.</div>
           <Link href={`/trips/${dues[0].groupId}`} className="btn-danger btn-sm">Settle now</Link>
         </div>
-      )}
-      {user.trustScore < 70 && (
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" /><div><b>Your trust level is limited.</b> You are ranked lower in matching and cannot book rides departing after 21:00. <Link href="/profile" className="font-bold underline">See details on your profile</Link></div></div>
       )}
 
       {surge.data && surge.data.hasData && surge.data.peak.multiplier > 1 && (

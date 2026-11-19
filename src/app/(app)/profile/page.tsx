@@ -31,7 +31,7 @@ export default function ProfilePage() {
   }
 
   const rows: [string, number, string][] = [
-    ['Verified student (email + ID)', b.base, 'Base'], ['Completed rides', b.rides, `${u.completedRides} × +5 (max +25)`], ['Peer rating', b.rating, u.ratingAvg ? `avg ${u.ratingAvg}/5` : 'no ratings yet'],
+    ['Verified student', b.base, 'Base'], ['Completed rides', b.rides, `${u.completedRides} × +5 (max +25)`], ['Peer rating', b.rating, u.ratingAvg ? `avg ${u.ratingAvg}/5` : 'no ratings yet'],
     ['Punctuality confirmations', b.punctuality, `${p.data.punctualCount} × +2 (max +10)`], ['Late cancellations', -b.lateCancelPenalty, `${u.lateCancels} × −15`], ['Other cancellations', -b.cancelPenalty, '−5 each'],
     ['Unresolved reports', -b.reportPenalty, '−25 each'], ['Moderation adjustments', b.adminAdjust, 'Student Affairs'],
   ];
@@ -41,9 +41,9 @@ export default function ProfilePage() {
       <h1 className="text-2xl font-extrabold text-slate-900">Profile & trust</h1>
       <div className="card p-5">
         <div className="flex flex-wrap items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-full bg-brand-600 text-2xl font-extrabold text-white">{u.name[0]}</div>
-          <div className="min-w-0 flex-1"><div className="text-lg font-extrabold text-slate-900">{u.name}</div><div className="text-sm text-slate-600">{u.email}</div><div className="mt-1 flex flex-wrap gap-1.5"><span className="badge bg-emerald-50 text-emerald-700"><BadgeCheck className="h-3 w-3" />ID {u.idCardStatus.toLowerCase()}</span><span className="chip">{u.rollNumber}</span><span className="chip">{u.department} · Year {u.year}</span></div></div>
+          <div className="min-w-0 flex-1"><div className="text-lg font-extrabold text-slate-900">{u.name}</div><div className="text-sm text-slate-600">{u.email}</div><div className="mt-1 flex flex-wrap gap-1.5"><span className="badge bg-emerald-50 text-emerald-700"><BadgeCheck className="h-3 w-3" />{u.idType ? `ID ${u.idCardStatus.toLowerCase()}` : 'IIITA student'}</span><span className="chip">{u.rollNumber}</span><span className="chip">{u.department} · Year {u.year}</span></div></div>
           <TrustBadge score={u.trustScore} size="lg" /></div>
-        <div className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><Lock className="h-4 w-4 shrink-0 text-brand-600" /><span>Gender: <b>{u.gender === 'FEMALE' ? 'Female' : u.gender === 'MALE' ? 'Male' : 'Other'}</b> {u.genderLocked ? <span className="chip ml-1" data-testid="gender-locked">Locked</span> : <span className="chip ml-1">Unverified</span>} — {u.genderLocked ? 'read from your government ID and cannot be edited, keeping gendered trips safe.' : 'locks once your ID is verified. Until then you only see mixed crews.'}</span></div>
+        <div className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-700"><Lock className="h-4 w-4 shrink-0 text-brand-600" /><span>Gender: <b>{u.gender === 'FEMALE' ? 'Female' : u.gender === 'MALE' ? 'Male' : 'Other'}</b> {u.genderLocked ? <span className="chip ml-1" data-testid="gender-locked">Locked</span> : <span className="chip ml-1">Unverified</span>} — {u.genderLocked ? 'set at signup and cannot be edited, keeping gendered trips safe.' : 'locks once your ID is verified. Until then you only see mixed crews.'}</span></div>
       </div>
 
       {u.role !== 'ADMIN' && u.idCardStatus !== 'VERIFIED' && (

@@ -142,7 +142,7 @@ export default function TripRoom({ params }: { params: { id: string } }) {
           {/* Vehicle + PIN */}
           {trip.isMember && (
             <div className="card space-y-3 p-4">
-              <h3 className="flex items-center gap-2 font-bold text-slate-900"><Car className="h-5 w-5 text-brand-600" />Verified vehicle & pickup PIN</h3>
+              <h3 className="flex items-center gap-2 font-bold text-slate-900"><Car className="h-5 w-5 text-brand-600" />{trip.operator ? 'Verified vehicle & pickup PIN' : 'Pickup PIN'}</h3>
               {trip.operator ? (
                 <div className="flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-3">
                   <Avatar name={trip.operator.name} size={44} />

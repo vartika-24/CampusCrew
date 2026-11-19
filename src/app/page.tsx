@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { ArrowRight, BadgeCheck, Leaf, Lock, MapPinned, ShieldAlert, Train, Users, Wallet } from 'lucide-react';
 
 const FEATURES = [
-  { icon: Lock, title: 'Gender-lock & verified students', body: 'College-email OTP + government-ID review. Every student is checked against a government ID. Gender is locked at verification; girls-only trips never appear to anyone else.' },
+  { icon: Lock, title: 'Gender-lock & verified students', body: 'Only @iiita.ac.in students can join. Gender is locked at signup, so girls-only trips never appear to anyone else.' },
   { icon: Users, title: 'Smart crew matching', body: 'Weighted by time overlap, cab fill & luggage, trust score and same-hostel night safety.' },
   { icon: Train, title: 'Multi-leg journeys', body: 'Cab → Train → Auto, each leg matched independently. Find same-train and same-flight buddies, opt-in only.' },
   { icon: ShieldAlert, title: 'Live tracking & SOS', body: 'Share a read-only trip link with parents. One tap SOS alerts campus security instantly.' },

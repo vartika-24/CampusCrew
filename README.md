@@ -8,13 +8,29 @@ Students (gender read from a government ID) plan single- or multi-leg journeys, 
 
 Live URL: https://campuscrew-b198.onrender.com/
 
+## Working-model mode (college email only, no ID step)
+
+For a pilot or a demo you can run CampusCrew so that a student just types their college email and is in — no code, no ID photo:
+
+```
+AUTH_MODE="instant"
+REQUIRE_GOV_ID="false"
+DEMO_MODE="false"          # clean: no sample data; a new user's profile is genuinely empty
+LOAD_STARTER_PLACES="true" # first boot adds the IIITA pickup points / hubs so trips can be planned
+```
+
+* New email → short profile setup (name, roll number, department, hostel, gender — gender is locked afterwards) → empty dashboard → **Plan a trip**.
+* Returning email → straight back into the same account.
+* **No OTP is ever shown on screen.** Admin emails (`ADMIN_EMAILS`) can *not* use this path — they always need an emailed code (configure the email provider to use the admin console).
+* Trade-off: with no code and no ID, nothing proves who owns an email address, so anyone who knows a classmate's address could sign in as them. Use `AUTH_MODE="otp"` (and `REQUIRE_GOV_ID="true"`) for real launches.
+
 ## Two ways to run it
 
 | | **Production** (real students) | **Demo** (try it / present it) |
 | --- | --- | --- |
 | `DEMO_MODE` | `false` (default) | `true` |
 | Data | starts **empty** — no sample users, trips, places, operators or demand | seeds IIITA **sample** accounts, trips, chats, reports and demand |
-| OTP | emailed through Brevo / SendGrid | emailed if a provider is configured, otherwise shown on screen |
+| Sign-in | `AUTH_MODE=otp` emailed code (Brevo / SendGrid), or `instant` (see above) | same options; the code is never shown on screen |
 | ID check | mandatory government ID, read automatically | same (seeded demo users are pre-verified) |
 | Live tracking | real GPS from riders' phones | simulated along a pseudo-route |
 | Demo login buttons | disabled | enabled |
@@ -33,6 +49,7 @@ Required `.env` values
 | Variable | Purpose |
 | --- | --- |
 | `DEMO_MODE=false` | no sample data, no demo login, no simulated GPS |
+| `AUTH_MODE` / `REQUIRE_GOV_ID` | `otp` + `true` (default, secure) or `instant` + `false` (working-model mode, above) |
 | `AUTH_SECRET` | random 32+ chars (`openssl rand -hex 32`); the server refuses to start sessions without it |
 | `ADMIN_EMAILS` | comma-separated Student-Affairs emails; each becomes an admin the first time they sign in with an OTP |
 | `ALLOWED_EMAIL_DOMAINS` | default `iiita.ac.in` (subdomains included) — nobody else can register |
@@ -99,7 +116,8 @@ Handy flows: *Rohan → Live now → SOS* then *Admin → Safety queue*; *Rohan 
 | `npm run setup` | local dev: `.env` (demo), Prisma client, database, demo seed |
 | `npm run db:reset` | **demo only** — wipe the database and re-seed samples (refuses unless `DEMO_MODE=true`) |
 | `npm test` | unit tests (trust, fare, gender filter, scoring, geo, validators, image checks, ID text reading, email providers) |
-| `npm run smoke` | ~150 end-to-end checks in demo mode (`BASE_URL=http://localhost:3000`, fresh `db:reset` first) |
+| `npm run smoke` | ~150 end-to-end checks in demo mode (start the server with `DEMO_MODE=true AUTH_MODE=otp REQUIRE_GOV_ID=true EXPOSE_DEV_OTP=true`, `db:reset` first; `BASE_URL=…`) |
+| `npm run smoke:instant` | ~30 end-to-end checks of working-model mode (new user, clean profile, first trip) — self-contained, run after `npm run build` |
 | `npm run smoke:prod` | ~45 end-to-end checks in **production mode** against a throw-away DB and a mock Brevo API (run after `npm run build`) |
 | `npm run typecheck` / `npm run lint` | static checks |
 

@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { randomInt } from 'crypto';
 import { db } from '@/lib/db';
 import { ApiError, bad, handle, ok, readJson, str } from '@/lib/api';
-import { isDemoMode } from '@/lib/config';
+import { authMode, exposeDevOtp } from '@/lib/config';
 import { emailConfigured, otpEmail, sendEmail } from '@/lib/email';
 import { clientIp, rateLimited } from '@/lib/ratelimit';
 import { isCollegeEmail, normalizeEmail } from '@/lib/validators';
@@ -15,8 +15,9 @@ export const POST = handle(async (req) => {
   if (!isCollegeEmail(email)) throw bad('Use your IIIT Allahabad email (you@iiita.ac.in).', 'BAD_DOMAIN');
   if (rateLimited(`otp-ip:${clientIp(req)}`, 20, 10 * 60_000)) throw new ApiError(429, 'Too many requests. Try again in a few minutes.', 'RATE_LIMITED');
 
+  if (authMode() === 'instant' && !emailConfigured()) throw new ApiError(400, 'This server signs you in directly with your college email. Use the Continue button.', 'USE_INSTANT');
   const deliver = emailConfigured();
-  if (!deliver && !isDemoMode()) throw new ApiError(503, 'Email delivery is not configured on this server. Please contact the administrator.', 'EMAIL_NOT_CONFIGURED');
+  if (!deliver && !exposeDevOtp()) throw new ApiError(503, 'Email delivery is not configured on this server. Please contact the administrator.', 'EMAIL_NOT_CONFIGURED');
 
   const last = await db.otpCode.findFirst({ where: { email }, orderBy: { createdAt: 'desc' } });
   if (last && Date.now() - last.createdAt.getTime() < 30_000) throw new ApiError(429, 'Please wait 30 seconds before requesting another code.', 'RATE_LIMITED');
@@ -39,6 +40,6 @@ export const POST = handle(async (req) => {
     }
     return ok({ sent: true, expiresInMinutes: 10 });
   }
-  // Demo mode without an email provider: show the code on screen so the app can be tried instantly.
+  // Automated tests only (EXPOSE_DEV_OTP=true). The code is never shown in the app UI.
   return ok({ sent: true, expiresInMinutes: 10, devOtp: code });
 });

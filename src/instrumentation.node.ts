@@ -1,9 +1,14 @@
 import { ensureSeeded } from '@/lib/seed';
 import { db } from '@/lib/db';
-import { isDemoMode } from '@/lib/config';
+import { isDemoMode, loadStarterPlaces } from '@/lib/config';
+import { PLACES } from '@/lib/seed/data';
 
 try {
   const seeded = await ensureSeeded();
+  if (loadStarterPlaces() && (await db.place.count()) === 0) {
+    for (const p of PLACES) await db.place.create({ data: { ...p, isPublic: true } });
+    console.log('[campuscrew] No places yet — loaded the IIITA pickup points / hubs (coordinates are approximate; edit them in Admin → Places).');
+  }
   if (seeded) console.log('[campuscrew] DEMO_MODE: empty database detected — seeded IIIT Allahabad demo data.');
   if (!isDemoMode()) {
     const demoUsers = await db.user.count({ where: { isDemo: true } });

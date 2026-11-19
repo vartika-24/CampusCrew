@@ -32,7 +32,7 @@ function NewTrip() {
   const initial = useMemo<Leg[] | null>(() => {
     if (!places.length || !meta.data) return null;
     const date = sp.get('date') || meta.data.settings.breakStart || meta.data.today;
-    return [{ originId: places.find((p) => p.kind === 'CAMPUS')?.id ?? '', destId: places.find((p) => p.kind !== 'CAMPUS')?.id ?? '', date, windowStart: sp.get('from') || '16:00', windowEnd: sp.get('to') || '17:30', mode: 'CAB', vehicleType: 'SEDAN4', luggage: 1, genderPref: 'MIXED', trainNumber: '', flightNumber: '' }];
+    return [{ originId: (places.find((p) => p.code === 'IIITA-G1') ?? places.find((p) => p.kind === 'CAMPUS'))?.id ?? '', destId: (places.find((p) => p.code === 'PRYJ') ?? places.find((p) => p.kind !== 'CAMPUS'))?.id ?? '', date, windowStart: sp.get('from') || '16:00', windowEnd: sp.get('to') || '17:30', mode: 'CAB', vehicleType: 'SEDAN4', luggage: 1, genderPref: 'MIXED', trainNumber: '', flightNumber: '' }];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [places.length, !!meta.data]);
   const L = legs ?? initial;

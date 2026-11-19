@@ -8,7 +8,7 @@ import { idImage } from './lib/idimage.mjs';
 const PORT = 3200, MOCK = 3201, BASE = `http://127.0.0.1:${PORT}`;
 const ADMIN = 'warden.office@iiita.ac.in';
 const env = {
-  ...process.env, NODE_ENV: 'production', DEMO_MODE: 'false', DATABASE_URL: 'file:./prod-test.db', AUTH_SECRET: 'x'.repeat(48), ADMIN_EMAILS: ADMIN,
+  ...process.env, NODE_ENV: 'production', DEMO_MODE: 'false', AUTH_MODE: 'otp', REQUIRE_GOV_ID: 'true', LOAD_STARTER_PLACES: 'false', EXPOSE_DEV_OTP: 'false', DATABASE_URL: 'file:./prod-test.db', AUTH_SECRET: 'x'.repeat(48), ADMIN_EMAILS: ADMIN,
   ALLOWED_EMAIL_DOMAINS: 'iiita.ac.in', EMAIL_PROVIDER: 'brevo', EMAIL_API_KEY: 'test-key', EMAIL_FROM_ADDRESS: 'noreply@campuscrew.test', EMAIL_API_BASE_URL: `http://127.0.0.1:${MOCK}`, PORT: String(PORT),
 };
 let pass = 0, fail = 0; const failures = [];
@@ -20,7 +20,7 @@ const mock = http.createServer((req, res) => { let b = ''; req.on('data', (c) =>
 await new Promise((r) => mock.listen(MOCK, '127.0.0.1', r));
 
 execSync('npx prisma db push --force-reset --skip-generate', { env, stdio: 'ignore' });
-const server = spawn('npx', ['next', 'start', '-p', String(PORT)], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(PORT)], { env, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = ''; server.stdout.on('data', (d) => (log += d)); server.stderr.on('data', (d) => (log += d));
 const cleanup = () => { try { server.kill('SIGTERM'); } catch {} mock.close(); try { execSync('rm -f prisma/prod-test.db prisma/prod-test.db-journal'); } catch {} };
 process.on('exit', cleanup);

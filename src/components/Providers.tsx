@@ -5,8 +5,8 @@ import { CheckCircle2, Info, XCircle } from 'lucide-react';
 import { api, type Me } from '@/lib/client';
 
 type Dues = { groupId: string; amount: number; route: string }[];
-type AuthState = { user: Me | null; loading: boolean; dues: Dues; unread: number; demoMode: boolean; refresh: () => Promise<void>; logout: () => Promise<void> };
-const AuthCtx = createContext<AuthState>({ user: null, loading: true, dues: [], unread: 0, demoMode: false, refresh: async () => {}, logout: async () => {} });
+type AuthState = { user: Me | null; loading: boolean; dues: Dues; unread: number; demoMode: boolean; authMode: 'otp' | 'instant'; refresh: () => Promise<void>; logout: () => Promise<void> };
+const AuthCtx = createContext<AuthState>({ user: null, loading: true, dues: [], unread: 0, demoMode: false, authMode: 'otp', refresh: async () => {}, logout: async () => {} });
 export const useAuth = () => useContext(AuthCtx);
 
 type Toast = { id: number; kind: 'success' | 'error' | 'info'; text: string };
@@ -14,13 +14,13 @@ const ToastCtx = createContext<{ push: (kind: Toast['kind'], text: string) => vo
 export const useToast = () => useContext(ToastCtx);
 
 export function Providers({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<Omit<AuthState, 'refresh' | 'logout'>>({ user: null, loading: true, dues: [], unread: 0, demoMode: false });
+  const [state, setState] = useState<Omit<AuthState, 'refresh' | 'logout'>>({ user: null, loading: true, dues: [], unread: 0, demoMode: false, authMode: 'otp' });
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const refresh = useCallback(async () => {
     try {
-      const r = await api<{ user: Me | null; dues?: Dues; unread?: number; demoMode: boolean }>('/api/auth/me');
-      setState({ user: r.user, loading: false, dues: r.dues ?? [], unread: r.unread ?? 0, demoMode: r.demoMode });
+      const r = await api<{ user: Me | null; dues?: Dues; unread?: number; demoMode: boolean; authMode: 'otp' | 'instant' }>('/api/auth/me');
+      setState({ user: r.user, loading: false, dues: r.dues ?? [], unread: r.unread ?? 0, demoMode: r.demoMode, authMode: r.authMode });
     } catch {
       setState((s) => ({ ...s, loading: false }));
     }

@@ -13,3 +13,21 @@ export function adminEmails(): string[] {
 }
 
 export const isAdminEmail = (email: string) => adminEmails().includes(email.toLowerCase());
+
+/**
+ * Sign-in mode.
+ *  - "otp":     a one-time code is emailed (needs an email provider)            <- secure default
+ *  - "instant": typing a college email signs you in directly (no code, no inbox check).
+ *               Fine for demos/pilots; anyone who knows a classmate's email could sign in as them.
+ *               Admin emails are never allowed through this path.
+ */
+export const authMode = (): 'otp' | 'instant' => (process.env.AUTH_MODE === 'instant' ? 'instant' : 'otp');
+
+/** When false, signup skips the government-ID photo and the student declares their gender (locked afterwards). */
+export const requireGovId = () => process.env.REQUIRE_GOV_ID !== 'false';
+
+/** Adds the IIITA pickup points / hubs from the project brief on first boot when there are no places yet. */
+export const loadStarterPlaces = () => process.env.LOAD_STARTER_PLACES !== 'false';
+
+/** Test-only: return the OTP in the API response. Never set in real deployments. */
+export const exposeDevOtp = () => process.env.EXPOSE_DEV_OTP === 'true';
