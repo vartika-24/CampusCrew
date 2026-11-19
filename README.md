@@ -6,6 +6,8 @@ Students (verified against a government ID) plan single- or multi-leg journeys, 
 
 > Runs out of the box: **Next.js 14 (App Router) + TypeScript + Tailwind + Prisma + SQLite**. No Docker, no cloud services.
 
+Live URL: https://campuscrew-b198.onrender.com/
+
 ## Two ways to run it
 
 | | **Production** (real students) | **Demo** (try it / present it) |
