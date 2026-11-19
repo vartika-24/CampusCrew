@@ -104,6 +104,10 @@ export default function TripRoom({ params }: { params: { id: string } }) {
         </div>
       )}
 
+      {trip.isMember && !ended && (
+        <button onClick={() => setModal('sos')} className="flex w-full animate-sos items-center justify-center gap-3 rounded-2xl bg-red-600 py-3.5 text-lg font-extrabold text-white shadow-lg active:scale-[.99] lg:hidden" data-testid="sos-button-mobile"><ShieldAlert className="h-6 w-6" />SOS — Emergency</button>
+      )}
+
       <div className="grid gap-5 lg:grid-cols-5">
         <div className="space-y-5 lg:col-span-3">
           {/* Live tracking */}
@@ -140,7 +144,7 @@ export default function TripRoom({ params }: { params: { id: string } }) {
               {trip.demoPin && !trip.me?.boarded && <p className="rounded-lg bg-amber-50 p-2 text-center text-xs text-amber-800">Demo mode hint: the driver would show PIN <b className="font-mono text-sm">{trip.demoPin}</b></p>}
               {trip.me?.boarded ? <div className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-800"><CheckCircle2 className="h-5 w-5" />Boarding confirmed with PIN</div>
                 : canBoard && (
-                  <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void run(() => post('board', { pin }), 'Boarding confirmed ✅', () => setPin('')); }}>
+                  <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(e) => { e.preventDefault(); void run(() => post('board', { pin }), 'Boarding confirmed ✅', () => setPin('')); }}>
                     <input className="input text-center font-mono text-lg tracking-[0.4em]" inputMode="numeric" maxLength={4} placeholder="• • • •" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} aria-label="4-digit trip PIN" />
                     <button className="btn-primary whitespace-nowrap" disabled={pin.length !== 4 || busy}><KeyRound className="h-4 w-4" />Confirm Boarding with PIN</button>
                   </form>)}
@@ -179,7 +183,7 @@ export default function TripRoom({ params }: { params: { id: string } }) {
 
         <div className="space-y-5 lg:col-span-2">
           {trip.isMember && !ended && (
-            <button onClick={() => setModal('sos')} className="flex w-full animate-sos items-center justify-center gap-3 rounded-2xl bg-red-600 py-4 text-lg font-extrabold text-white shadow-lg hover:bg-red-700 active:scale-[.99]" data-testid="sos-button"><ShieldAlert className="h-6 w-6" />SOS — Emergency</button>
+            <button onClick={() => setModal('sos')} className="hidden w-full animate-sos lg:flex items-center justify-center gap-3 rounded-2xl bg-red-600 py-4 text-lg font-extrabold text-white shadow-lg hover:bg-red-700 active:scale-[.99]" data-testid="sos-button"><ShieldAlert className="h-6 w-6" />SOS — Emergency</button>
           )}
           {trip.isMember && <Chat groupId={trip.id} meId={user.id} onState={d.silentReload} />}
 

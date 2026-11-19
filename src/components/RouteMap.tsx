@@ -37,12 +37,12 @@ export function RouteMap({ route, position, origin, dest, progress, vehicleLabel
       <polyline points={doneStr} fill="none" stroke="#4f46e5" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx={a.x} cy={a.y} r="9" fill="#10b981" stroke="#fff" strokeWidth="3" />
       <circle cx={b.x} cy={b.y} r="9" fill="#dc2626" stroke="#fff" strokeWidth="3" />
-      <text x={a.x} y={a.y - 16} fontSize="12" fontWeight="700" fill="#0f172a" textAnchor={labelAnchor(a.x)}>{origin.length > 26 ? origin.slice(0, 25) + '…' : origin}</text>
-      <text x={b.x} y={b.y + 26} fontSize="12" fontWeight="700" fill="#0f172a" textAnchor={labelAnchor(b.x)}>{dest.length > 26 ? dest.slice(0, 25) + '…' : dest}</text>
+      <text x={a.x} y={a.y + (cur.y < a.y - 10 ? 26 : -16)} fontSize="12" fontWeight="700" fill="#0f172a" textAnchor={labelAnchor(a.x)}>{origin.length > 26 ? origin.slice(0, 25) + '…' : origin}</text>
+ <text x={b.x} y={b.y + (cur.y > b.y + 10 ? -16 : 26)} fontSize="12" fontWeight="700" fill="#0f172a" textAnchor={labelAnchor(b.x)}>{dest.length > 26 ? dest.slice(0, 25) + '…' : dest}</text>
       <g transform={`translate(${cur.x} ${cur.y})`}>
         <circle r="16" fill="#4f46e5" opacity=".18"><animate attributeName="r" values="10;20;10" dur="2s" repeatCount="indefinite" /></circle>
         <circle r="9" fill="#312e81" stroke="#fff" strokeWidth="3" />
-        {vehicleLabel && <text y="-16" fontSize="10" fontWeight="700" fill="#312e81" textAnchor="middle">{vehicleLabel}</text>}
+        {vehicleLabel && progress > 0.05 && progress < 0.8 && <text y="-16" fontSize="10" fontWeight="700" fill="#312e81" textAnchor="middle">{vehicleLabel}</text>}
       </g>
     </svg>
   );
