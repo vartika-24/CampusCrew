@@ -60,7 +60,7 @@ export default function BuddiesPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div><h1 className="text-2xl font-extrabold text-slate-900">Same-train / same-flight buddies</h1><p className="text-sm text-slate-600">Find verified IIITA students on your train or flight and share the cab to the station.</p></div>
-      {!verified && <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Buddy features unlock once Student Affairs approves your ID.</div>}
+      {!verified && <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Verify your government ID on your profile to use buddy features.</div>}
 
       <div className="card space-y-3 p-4">
         <div className="flex items-start gap-3">

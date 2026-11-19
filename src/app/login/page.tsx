@@ -115,8 +115,8 @@ function LoginInner() {
       ) : (
       <div className="card space-y-3 p-5 text-sm text-slate-600">
         <div className="font-extrabold text-slate-900">Who can join?</div>
-        <p>Students with an <b>@iiita.ac.in</b> email. We email you a one-time code, then verify a government ID (Aadhaar, passport, voter ID or driving licence) so girls-only and boys-only trips stay genuinely safe.</p>
-        <p>Your ID is reviewed by Student Affairs and deleted right after.</p>
+        <p>Students with an <b>@iiita.ac.in</b> email. We email you a one-time code, then read a government ID (Aadhaar, passport, voter ID or driving licence) to set your verified gender, so girls-only and boys-only trips stay safe.</p>
+        <p>The ID photo is read automatically and is never stored.</p>
       </div>
       )}
     </div>
